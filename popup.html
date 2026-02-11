@@ -54,14 +54,20 @@
 
         #result {
             margin-top: 15px;
-            padding: 15px;
+            padding: 20px;
             border: 1px solid #ddd;
-            border-radius: 4px;
-            min-height: 150px;
-            max-height: 400px;
+            border-radius: 6px;
+            background-color: #fafafa;
+
+            /* Increased height for the summary content */
+            min-height: 300px;
+            max-height: 500px;
             overflow-y: auto;
+
+            /* Make the text bigger and easier to read */
+            font-size: 12px;
+            line-height: 1.6;
             white-space: pre-wrap;
-            line-height: 1.5;
         }
 
         #result ul {
@@ -106,14 +112,14 @@
         <select id="summary-type">
             <option value="brief">Brief Summary</option>
             <option value="detailed">Detailed Summary</option>
-            <option value="bullet-points">Bullet Points</option>
+            <option value="bullets">Bullet Points</option>
         </select>
         <button id="summarize-button">Summarize</button>
         <button id="copy-button">Copy to Clipboard</button>
     </div>
 
     <pre id="result">Select a type and click Summarize</pre>
-    <script src="popup.js"></script>
+    <script src="popup.js"></script
 </body>
 
 </html>
