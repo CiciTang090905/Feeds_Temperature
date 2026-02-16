@@ -80,7 +80,6 @@ function getPageData() {
             stats: getTweetStats(tweetArticle),
         };
     }
-
     return {
         kind: "article",
         text: getArticleText(),
