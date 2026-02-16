@@ -12,6 +12,5 @@ document.addEventListener("DOMContentLoaded", () => {
             setTimeout(() => window.close(), 1000) //close after 1 second
         })
     }
-
     )
 })
