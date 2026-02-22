@@ -1,4 +1,7 @@
+//id: post.getAttribute("data-post-id"), text, stats 
 const postLists = [];
+let updateTimerId = null;
+let started = false;
 
 function isOnX() {
     return /(^|\.)x\.com$/.test(location.hostname) || /(^|\.)twitter\.com$/.test(location.hostname);
@@ -23,8 +26,6 @@ function addSimpleBannerText() {
     textarea.style.overflow = "auto";
     textarea.style.width = `${Math.round(window.innerWidth * 0.2)}px`;
     textarea.style.height = `${Math.round(window.innerHeight / 4)}px`;
-    textarea.style.maxWidth = `${window.innerWidth}px`;
-    textarea.style.maxHeight = `${window.innerHeight}px`;
 
     document.body.appendChild(textarea);
     function updatePosition() { //set up position, just below the sidebar
@@ -40,49 +41,80 @@ function addSimpleBannerText() {
 
 function renderStatOnTweet() {
     if (!isOnX()) return;
-
-    setTimeout(addSimpleBannerText, 300);
-
+    addSimpleBannerText();
+    clearList();
     const posts = getPostLists();
+    const textBox = document.getElementById("injectText");
 
-    posts.forEach((p) => {
-        console.log(`POST #${p.id}`);
-        console.log("text:", p.text);
-        console.log("stats:", p.stats);
-    });
+    if (textBox) {
+        textBox.value = `Found ${posts.length} posts\n\n` +
+            posts.map(p => `POST #${p.id}\nText: ${p.text}\nStats:\n${formatStat(p.stats)}\n`).join("\n");
+    }
 
     if (posts.length === 0) { //retry after 1 second if no posts found, since X can be slow to load content
         setTimeout(renderStatOnTweet, 1000);
     }
 }
 
+function formatStat(stats) {
+    if (!stats) return "No stats available";
+    return [
+        `• Replies: ${stats.replies ?? 0}`,
+        `• Reposts: ${stats.reposts ?? 0}`,
+        `• Likes: ${stats.likes ?? 0}`,
+        `• Bookmarks: ${stats.bookmarks ?? 0}`,
+        `• Views: ${stats.views ?? 0}`,
+    ].join("\n");
+}
+
+function clearList() {
+    postLists.length = 0;
+}
+
 function getPostLists() {
-    const timeline = document.querySelector("div[aria-label='Timeline: Your Home Timeline']") ||
+    const timeline =
+        document.querySelector("div[aria-label='Timeline: Your Home Timeline']") ||
         document.querySelector("main[role='main']");
     if (!timeline) return postLists;
-    const posts = timeline.querySelectorAll("div[data-testid='cellInnerDiv']");
-    posts.forEach((post) => {
-        //if already seen, do not add
-        if (post.hasAttribute("data-post-id")) return;
 
-        post.setAttribute("data-post-id", String(postLists.length));
+    const posts = timeline.querySelectorAll("div[data-testid='cellInnerDiv']");
+    let id = 0;
+
+    posts.forEach((post) => {
         const article = post.querySelector('article[data-testid="tweet"]');
         if (!article) return;
 
         const stats = getTweetStats(article);
         const text = getTweetText(article);
-        //only add posts with text content
         if (!text) return;
 
-        postLists.push({ id: post.getAttribute("data-post-id"), text, stats });
+        post.setAttribute("data-post-id", String(id));
+
+        postLists.push({ id: String(id), text, stats });
+        id++;
     });
+
     return postLists;
 }
 
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", renderStatOnTweet);
-} else {
+//set timmer to update stats every 3 seconds, since X can update stats in real time
+function start3sTimmer() {
+    if (started) return;
+    started = true;
+
+    // Run once now
     renderStatOnTweet();
+
+    // Then every 3 seconds
+    updateTimerId = setInterval(() => {
+        renderStatOnTweet();
+    }, 3000);
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start3sTimmer);
+} else {
+    start3sTimmer();
 }
 
 function findTweetArticle() {
