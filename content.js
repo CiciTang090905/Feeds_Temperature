@@ -1,35 +1,49 @@
-function getArticleText() {
-    const article = document.querySelector("article");
-    if (article) return article.innerText;
-    const paragraphs = Array.from(document.querySelectorAll("p"));
-    return paragraphs.map((p) => p.innerText).join("\n");
+function isOnX() {
+    return /(^|\.)x\.com$/.test(location.hostname) || /(^|\.)twitter\.com$/.test(location.hostname);
 }
 
-function getTweetStats() {
-    const group = document.querySelector('article div[role="group"][aria-label]');
-    if (!group) return null;
+function addSimpleBannerText() {
+    if (document.getElementById("injectText")) return;
 
-    const label = group.getAttribute("aria-label");
-    if (!label) return null;
+    const textarea = document.createElement("textarea");
+    textarea.id = "injectText";
+    textarea.value = "HELLO FROM EXTENSION";
 
-    const stats = {};
+    textarea.style.position = "fixed";
+    textarea.style.zIndex = "2147483647";
+    textarea.style.background = "#2f2f2f";
+    textarea.style.color = "white";
+    textarea.style.padding = "8px 10px";
+    textarea.style.borderRadius = "10px";
+    textarea.style.border = "1px solid rgba(255,255,255,0.15)";
+    textarea.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
+    textarea.style.boxSizing = "border-box";
+    textarea.style.resize = "both";
+    textarea.style.overflow = "auto";
 
-    const regex = /([\d,.]+)\s+(repl(?:y|ies)|reposts?|likes?|bookmarks?|views?)/gi;
-    let match;
+    textarea.style.width = `${Math.round(window.innerWidth * 0.2)}px`;
+    textarea.style.height = `${Math.round(window.innerHeight / 4)}px`;
+    textarea.style.maxWidth = `${window.innerWidth}px`;
+    textarea.style.maxHeight = `${window.innerHeight}px`;
 
-    while ((match = regex.exec(label)) !== null) {
-        const value = match[1].replace(/,/g, "");
-        const metric = match[2].toLowerCase();
+    document.body.appendChild(textarea);
 
-        if (metric.startsWith("repl")) stats.replies = value;
-        else if (metric.startsWith("repost")) stats.reposts = value;
-        else if (metric.startsWith("like")) stats.likes = value;
-        else if (metric.startsWith("bookmark")) stats.bookmarks = value;
-        else if (metric.startsWith("view")) stats.views = value;
+    function updatePosition() {
+        const innerColumn = document.querySelector('header[role="banner"] nav[role="navigation"]');
+        if (!innerColumn) return;
+        const rect = innerColumn.getBoundingClientRect();
+        textarea.style.left = `${rect.left}px`;
+        textarea.style.top = `${Math.round(window.innerHeight * 0.58)}px`;
     }
 
-    return stats;
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
 }
+
+if (isOnX()) {
+    setTimeout(addSimpleBannerText, 500);
+}
+
 
 function findTweetArticle() {
     const byTestId = document.querySelector('article[data-testid="tweet"]');
