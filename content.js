@@ -8,17 +8,39 @@ function isOnX() {
 }
 
 function addSimpleBannerText() {
-    if (document.getElementById("injectText")) return;
+    if (document.getElementById("injectTextWrap")) return;
+
+    //draggable container
+    const wrap = document.createElement("div");
+    wrap.id = "injectTextWrap";
+    wrap.style.position = "fixed";
+    wrap.style.zIndex = "2147483647";
+    wrap.style.left = "20px";
+    wrap.style.top = "200px";
+    wrap.style.boxSizing = "border-box";
+
+    const handle = document.createElement("div");
+    handle.textContent = "Drag";
+    handle.style.cursor = "grab";
+    handle.style.userSelect = "none";
+    handle.style.padding = "6px 10px";
+    handle.style.borderRadius = "10px 10px 0 0";
+    handle.style.background = "rgba(0,0,0,0.8)";
+    handle.style.color = "white";
+    handle.style.fontSize = "12px";
+    handle.style.border = "1px solid rgba(189, 177, 177, 0.15)";
+    handle.style.borderBottom = "none";
+    handle.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
 
     const textarea = document.createElement("textarea");
     textarea.id = "injectText";
-    textarea.value = "HELLO FROM EXTENSION";
-    textarea.style.position = "fixed"; //fixed to viewport
-    textarea.style.zIndex = "2147483647"; //set high value, rendered on top
+    textarea.value = "Loading...";
+
+    textarea.style.display = "block";
     textarea.style.background = "#706f6f";
     textarea.style.color = "white";
     textarea.style.padding = "8px 10px";
-    textarea.style.borderRadius = "10px";
+    textarea.style.borderRadius = "0 0 10px 10px";
     textarea.style.border = "1px solid rgba(189, 177, 177, 0.15)";
     textarea.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
     textarea.style.boxSizing = "border-box";
@@ -27,16 +49,81 @@ function addSimpleBannerText() {
     textarea.style.width = `${Math.round(window.innerWidth * 0.2)}px`;
     textarea.style.height = `${Math.round(window.innerHeight / 4)}px`;
 
-    document.body.appendChild(textarea);
-    function updatePosition() { //set up position, just below the sidebar
+    wrap.appendChild(handle);
+    wrap.appendChild(textarea);
+    document.body.appendChild(wrap);
+
+    // Auto-position until user drags
+    let userMoved = false;
+
+    function clamp(val, min, max) {
+        return Math.max(min, Math.min(max, val));
+    }
+
+    function updatePosition() {
+        if (userMoved) return;
+
         const innerColumn = document.querySelector('header[role="banner"] nav[role="navigation"]');
         if (!innerColumn) return;
+
         const rect = innerColumn.getBoundingClientRect();
-        textarea.style.left = `${rect.left}px`;
-        textarea.style.top = `${Math.round(window.innerHeight * 0.58)}px`;
+
+        const desiredLeft = rect.left;
+        const desiredTop = Math.round(window.innerHeight * 0.58);
+
+        const maxLeft = window.innerWidth - wrap.offsetWidth - 8;
+        const maxTop = window.innerHeight - wrap.offsetHeight - 8;
+
+        wrap.style.left = `${clamp(desiredLeft, 8, maxLeft)}px`;
+        wrap.style.top = `${clamp(desiredTop, 8, maxTop)}px`;
     }
+
     updatePosition();
-    window.addEventListener("resize", updatePosition); //everytime resize the wind, render again with update position
+    window.addEventListener("resize", updatePosition);
+
+    // Drag logic (on handle)
+    let dragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    handle.addEventListener("mousedown", (e) => {
+        dragging = true;
+        userMoved = true;
+
+        handle.style.cursor = "grabbing";
+
+        const rect = wrap.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+
+        document.body.style.userSelect = "none";
+        e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+
+        const maxLeft = window.innerWidth - wrap.offsetWidth - 8;
+        const maxTop = window.innerHeight - wrap.offsetHeight - 8;
+
+        const nextLeft = clamp(e.clientX - offsetX, 8, maxLeft);
+        const nextTop = clamp(e.clientY - offsetY, 8, maxTop);
+
+        wrap.style.left = `${nextLeft}px`;
+        wrap.style.top = `${nextTop}px`;
+    });
+
+    document.addEventListener("mouseup", () => {
+        if (!dragging) return;
+        dragging = false;
+        handle.style.cursor = "grab";
+        document.body.style.userSelect = "auto";
+    });
+
+    handle.addEventListener("dblclick", () => {
+        userMoved = false;
+        updatePosition();
+    });
 }
 
 function renderStatOnTweet() {
