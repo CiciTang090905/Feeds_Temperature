@@ -170,17 +170,13 @@ function getPostLists() {
     posts.forEach((post) => {
         const article = post.querySelector('article[data-testid="tweet"]');
         if (!article) return;
-
         const stats = getTweetStats(article);
         const text = getTweetText(article);
         if (!text) return;
-
         post.setAttribute("data-post-id", String(id));
-
         postLists.push({ id: String(id), text, stats });
         id++;
     });
-
     return postLists;
 }
 
