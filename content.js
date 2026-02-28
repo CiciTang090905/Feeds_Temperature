@@ -81,7 +81,7 @@ function addSimpleBannerText() {
     updatePosition();
     window.addEventListener("resize", updatePosition);
 
-    // Drag logic (on handle)
+    // Drag (on handle)
     let dragging = false;
     let offsetX = 0;
     let offsetY = 0;
@@ -263,3 +263,129 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
         sendResponse(getPageData());
     }
 });
+
+// Post capture – stores visible tweets to chrome.storage.local
+// Only runs on x.com
+// functions for checking storage status on DevTools console 
+
+const CAPTURE_STORAGE_KEY = "captured_posts";
+const capturedIds = new Set();
+const tweetIdRegex = /\/status\/([0-9]+)/;
+
+function extractTweetIdFromArticle(articleDOM) {
+    const links = articleDOM.querySelectorAll("a[href*='status']");
+    for (let i = 0; i < links.length; i++) {
+        const match = links[i].href.match(tweetIdRegex);
+        if (match !== null) return match[1];
+    }
+    return null;
+}
+
+function isInViewport(el) {
+    const rect = el.getBoundingClientRect();
+    return (
+        rect.bottom > 0 &&
+        rect.right > 0 &&
+        rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
+        rect.left < (window.innerWidth || document.documentElement.clientWidth)
+    );
+}
+
+// Storage helpers using chrome.storage.local
+async function loadCapturedPosts() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(CAPTURE_STORAGE_KEY, (result) => {
+            resolve(result[CAPTURE_STORAGE_KEY] || []);
+        });
+    });
+}
+
+async function saveCapturedPosts(posts) {
+    return new Promise((resolve) => {
+        chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: posts }, resolve);
+    });
+}
+
+// Capture
+async function captureVisibleTweets() {
+    const articles = document.querySelectorAll("article");
+    const newPosts = [];
+
+    articles.forEach((article) => {
+        if (!isInViewport(article)) return;
+        const tweetId = extractTweetIdFromArticle(article);
+        if (!tweetId) return;
+        if (capturedIds.has(tweetId)) return;
+
+        const text = getTweetText(article);
+        if (!text) return;
+
+        capturedIds.add(tweetId);
+        newPosts.push({ tweetId, text, capturedAt: Date.now() });
+    });
+
+    if (newPosts.length === 0) return;
+
+    let stored = await loadCapturedPosts();
+    const storedIdSet = new Set(stored.map((p) => p.tweetId));
+    const trulyNew = newPosts.filter((p) => !storedIdSet.has(p.tweetId));
+
+    if (trulyNew.length === 0) return;
+
+    stored = stored.concat(trulyNew);
+    await saveCapturedPosts(stored);
+    console.log(`${trulyNew.length} new post(s) saved. ${stored.length} total in storage.`);
+}
+
+//on x.com only
+let captureTimerId = null;
+let captureStarted = false;
+
+function startPostCapture() {
+    if (captureStarted) return;
+    captureStarted = true;
+    captureVisibleTweets();
+    captureTimerId = setInterval(captureVisibleTweets, 500);
+    console.log("Starting Capture...");
+}
+
+if (isOnX()) {
+    startPostCapture();
+}
+
+
+window.showStoredPosts = async function () {
+    const posts = await loadCapturedPosts();
+    console.log(`${posts.length} posts in storage:`);
+    console.table(
+        posts.map((p) => ({
+            tweetId: p.tweetId,
+            text: p.text.slice(0, 80) + (p.text.length > 80 ? "…" : ""),
+            captured: new Date(p.capturedAt).toLocaleString(),
+        }))
+    );
+    return posts;
+};
+
+window.exportPostsAsText = async function () {
+    const posts = await loadCapturedPosts();
+    const lines = posts.map(
+        (p, i) =>
+            `--- Post #${i + 1} (ID: ${p.tweetId}) [${new Date(p.capturedAt).toLocaleString()}] ---\n${p.text}`
+    );
+    const blob = lines.join("\n\n");
+    console.log(blob);
+    return blob;
+};
+
+window.clearStoredPosts = async function () {
+    await saveCapturedPosts([]);
+    capturedIds.clear();
+    console.log("Storage cleared");
+};
+
+window.stopPostCapture = function () {
+    if (captureTimerId) clearInterval(captureTimerId);
+    captureStarted = false;
+    console.log("Capture stopped");
+};
