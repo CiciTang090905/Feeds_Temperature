@@ -218,17 +218,21 @@ function getTweetText(tweetArticle) {
 function getTweetMedia(tweetArticle) {
     const media = { images: [], videoThumbnails: [] };
 
-    // 1. Video thumbnails – grab the poster attribute from <video> elements
     const videos = tweetArticle.querySelectorAll("video[poster]");
     videos.forEach((v) => {
         if (v.poster) media.videoThumbnails.push(v.poster);
     });
 
-    // 2. Tweet images – only media images (filter out avatars, emoji, icons)
-    const imgs = tweetArticle.querySelectorAll('img[src*="pbs.twimg.com/media"]');
+    const excludePatterns = ["profile_images", "emoji", "hashflag"];
+    const imgs = tweetArticle.querySelectorAll("img[src]");
     imgs.forEach((img) => {
-        if (img.src && !media.images.includes(img.src)) {
-            media.images.push(img.src);
+        const src = img.src;
+        if (!src || media.images.includes(src) || media.videoThumbnails.includes(src)) return;
+        if (excludePatterns.some((p) => src.includes(p))) return;
+        if (src.includes("amplify_video_thumb") || src.includes("tweet_video_thumb") || src.includes("ext_tw_video_thumb")) {
+            media.videoThumbnails.push(src);
+        } else if (src.includes("pbs.twimg.com/media") || src.includes("pbs.twimg.com/card_img")) {
+            media.images.push(src);
         }
     });
 
@@ -381,8 +385,8 @@ window.showStoredPosts = async function () {
     console.table(
         posts.map((p) => ({
             tweetId: p.tweetId,
-            images: (p.media?.images || []).join(", "),
-            videoThumbnails: (p.media?.videoThumbnails || []).join(", "),
+            images: (p.media?.images?.length) ? p.media.images.join(", ") : "none",
+            videoThumbnails: (p.media?.videoThumbnails?.length) ? p.media.videoThumbnails.join(", ") : "none",
             text: p.text.slice(0, 80) + (p.text.length > 80 ? "…" : ""),
             captured: new Date(p.capturedAt).toLocaleString(),
         }))
@@ -393,8 +397,11 @@ window.showStoredPosts = async function () {
 window.exportPostsAsText = async function () {
     const posts = await loadCapturedPosts();
     const lines = posts.map(
-        (p, i) =>
-            `--- Post #${i + 1} (ID: ${p.tweetId}) [${new Date(p.capturedAt).toLocaleString()}] ---\n${p.text}`
+        (p, i) => {
+            const imgs = p.media?.images?.length ? p.media.images.join("\n  ") : "none";
+            const vids = p.media?.videoThumbnails?.length ? p.media.videoThumbnails.join("\n  ") : "none";
+            return `--- Post #${i + 1} (ID: ${p.tweetId}) [${new Date(p.capturedAt).toLocaleString()}] ---\n${p.text}\nImages: ${imgs}\nVideo Thumbnails: ${vids}`;
+        }
     );
     const blob = lines.join("\n\n");
     console.log(blob);
