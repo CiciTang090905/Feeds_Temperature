@@ -30,6 +30,12 @@ function getTweetText(tweetArticle) {
     return node ? node.innerText : "";
 }
 
+function getTweetImageOrVideo(tweetArticle) {
+    const node = tweetArticle.querySelector('img');
+    return node ? node.src : "";
+}
+
+
 function isInViewport(element) {
     const rect = element.getBoundingClientRect();
     return (
@@ -46,7 +52,7 @@ function loadStoredPosts() {
         const raw = localStorage.getItem(STORAGE_KEY);
         return raw ? JSON.parse(raw) : [];
     } catch (e) {
-        console.warn("⚠️ Failed to load stored posts:", e);
+        console.warn("Failed to load stored posts:", e);
         return [];
     }
 }
@@ -55,7 +61,7 @@ function saveStoredPosts(posts) {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
     } catch (e) {
-        console.warn("⚠️ Failed to save (storage may be full):", e);
+        console.warn("Failed to save (storage may be full):", e);
     }
 }
 
@@ -71,12 +77,14 @@ function captureVisibleTweets() {
         if (seenIds.has(tweetId)) return;
 
         const text = getTweetText(article);
+        const imageOrVideo = getTweetImageOrVideo(article);
         if (!text) return;
 
         seenIds.add(tweetId);
         newPosts.push({
             tweetId,
             text,
+            imageOrVideo,
             capturedAt: Date.now(),
         });
     });

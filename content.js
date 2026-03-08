@@ -215,6 +215,26 @@ function getTweetText(tweetArticle) {
     return node ? node.innerText : "";
 }
 
+function getTweetMedia(tweetArticle) {
+    const media = { images: [], videoThumbnails: [] };
+
+    // 1. Video thumbnails – grab the poster attribute from <video> elements
+    const videos = tweetArticle.querySelectorAll("video[poster]");
+    videos.forEach((v) => {
+        if (v.poster) media.videoThumbnails.push(v.poster);
+    });
+
+    // 2. Tweet images – only media images (filter out avatars, emoji, icons)
+    const imgs = tweetArticle.querySelectorAll('img[src*="pbs.twimg.com/media"]');
+    imgs.forEach((img) => {
+        if (img.src && !media.images.includes(img.src)) {
+            media.images.push(img.src);
+        }
+    });
+
+    return media;
+}
+
 function getTweetStats(tweetArticle) {
     // On Tweet, there is div[role="group"][aria-label="... replies, ... likes, ..."] for statistics
     const group = tweetArticle.querySelector('div[role="group"][aria-label]');
@@ -249,6 +269,7 @@ function getPageData() {
             kind: "tweet",
             text: getTweetText(tweetArticle),
             stats: getTweetStats(tweetArticle),
+            media: getTweetMedia(tweetArticle),
         };
     }
     return {
@@ -318,10 +339,11 @@ async function captureVisibleTweets() {
         if (capturedIds.has(tweetId)) return;
 
         const text = getTweetText(article);
+        const media = getTweetMedia(article);
         if (!text) return;
 
         capturedIds.add(tweetId);
-        newPosts.push({ tweetId, text, capturedAt: Date.now() });
+        newPosts.push({ tweetId, text, media, capturedAt: Date.now() });
     });
 
     if (newPosts.length === 0) return;
@@ -353,13 +375,14 @@ if (isOnX()) {
     startPostCapture();
 }
 
-
 window.showStoredPosts = async function () {
     const posts = await loadCapturedPosts();
     console.log(`${posts.length} posts in storage:`);
     console.table(
         posts.map((p) => ({
             tweetId: p.tweetId,
+            images: (p.media?.images || []).join(", "),
+            videoThumbnails: (p.media?.videoThumbnails || []).join(", "),
             text: p.text.slice(0, 80) + (p.text.length > 80 ? "…" : ""),
             captured: new Date(p.capturedAt).toLocaleString(),
         }))
