@@ -215,6 +215,26 @@ function getTweetText(tweetArticle) {
     return node ? node.innerText : "";
 }
 
+function getTweetAuthor(tweetArticle) {
+    const userNameDiv = tweetArticle.querySelector('div[data-testid="User-Name"]');
+    if (!userNameDiv) return { name: "", handle: "" };
+    const spans = userNameDiv.querySelectorAll("span");
+    let name = "";
+    let handle = "";
+    for (const span of spans) {
+        const text = span.textContent.trim();
+        if (text.startsWith("@")) { handle = text; break; }
+    }
+    const nameLink = userNameDiv.querySelector("a span");
+    if (nameLink) name = nameLink.textContent.trim();
+    return { name, handle };
+}
+
+function getTweetDate(tweetArticle) {
+    const timeEl = tweetArticle.querySelector("time[datetime]");
+    return timeEl ? timeEl.getAttribute("datetime") : "";
+}
+
 function getTweetMedia(tweetArticle) {
     const media = { images: [], videoThumbnails: [] };
 
@@ -344,10 +364,12 @@ async function captureVisibleTweets() {
 
         const text = getTweetText(article);
         const media = getTweetMedia(article);
+        const author = getTweetAuthor(article);
+        const postedAt = getTweetDate(article);
         if (!text) return;
 
         capturedIds.add(tweetId);
-        newPosts.push({ tweetId, text, media, capturedAt: Date.now() });
+        newPosts.push({ tweetId, author, postedAt, text, media, capturedAt: Date.now() });
     });
 
     if (newPosts.length === 0) return;
@@ -385,6 +407,8 @@ window.showStoredPosts = async function () {
     console.table(
         posts.map((p) => ({
             tweetId: p.tweetId,
+            author: p.author ? `${p.author.name} (${p.author.handle})` : "",
+            postedAt: p.postedAt || "",
             images: (p.media?.images?.length) ? p.media.images.join(", ") : "none",
             videoThumbnails: (p.media?.videoThumbnails?.length) ? p.media.videoThumbnails.join(", ") : "none",
             text: p.text.slice(0, 80) + (p.text.length > 80 ? "…" : ""),
@@ -398,9 +422,10 @@ window.exportPostsAsText = async function () {
     const posts = await loadCapturedPosts();
     const lines = posts.map(
         (p, i) => {
+            const authorStr = p.author ? `${p.author.name} (${p.author.handle})` : "unknown";
             const imgs = p.media?.images?.length ? p.media.images.join("\n  ") : "none";
             const vids = p.media?.videoThumbnails?.length ? p.media.videoThumbnails.join("\n  ") : "none";
-            return `--- Post #${i + 1} (ID: ${p.tweetId}) [${new Date(p.capturedAt).toLocaleString()}] ---\n${p.text}\nImages: ${imgs}\nVideo Thumbnails: ${vids}`;
+            return `--- Post #${i + 1} (ID: ${p.tweetId}) [${new Date(p.capturedAt).toLocaleString()}] ---\nAuthor: ${authorStr}\nPosted: ${p.postedAt || "unknown"}\n${p.text}\nImages: ${imgs}\nVideo Thumbnails: ${vids}`;
         }
     );
     const blob = lines.join("\n\n");

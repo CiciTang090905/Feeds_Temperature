@@ -1,31 +1,32 @@
 {
     "manifest_version": 3,
-    "name": "AI Summary for Articles",
+    "name": "Sentiment Analysis",
     "version": "1",
-
-    "permissions": ["scripting", "activeTab", "storage"],
-
+    "permissions": [
+        "scripting",
+        "activeTab",
+        "storage"
+    ],
     "action": {
         "default_popup": "popup.html",
         "default_icon": "icon.png"
     },
-
     "content_scripts": [
-    {
-    "matches": ["<all_urls>"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-    }
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_idle"
+        }
     ],
-
     "background": {
         "service_worker": "background.js"
     },
-
     "options_page": "options.html",
-
     "host_permissions": [
         "<all_urls>"
     ]
-    
 }
