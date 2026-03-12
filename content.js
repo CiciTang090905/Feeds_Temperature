@@ -48,10 +48,36 @@ function getTweetDate(tweetArticle) {
 }
 
 function getTweetMedia(tweetArticle) {
-    const media = { images: [], videoThumbnails: [] };
-    const videos = tweetArticle.querySelectorAll("video[poster]");
+    const media = { images: [], videoThumbnails: [], videoSources: [], videoPageUrls: [] };
+    const isUsefulSourceUrl = (url) => {
+        if (!url) return false;
+        return !url.startsWith("blob:") && !url.startsWith("data:");
+    };
+
+    const videos = tweetArticle.querySelectorAll("video");
     videos.forEach((video) => {
-        if (video.poster) media.videoThumbnails.push(video.poster);
+        if (video.poster && !media.videoThumbnails.includes(video.poster)) {
+            media.videoThumbnails.push(video.poster);
+        }
+
+        const directVideoSrc = video.currentSrc || video.src || "";
+        if (isUsefulSourceUrl(directVideoSrc) && !media.videoSources.includes(directVideoSrc)) {
+            media.videoSources.push(directVideoSrc);
+        }
+    });
+
+    const videoSources = tweetArticle.querySelectorAll("video source[src]");
+    videoSources.forEach((source) => {
+        const src = source.src || source.getAttribute("src") || "";
+        if (!isUsefulSourceUrl(src) || media.videoSources.includes(src)) return;
+        media.videoSources.push(src);
+    });
+
+    const videoLinks = tweetArticle.querySelectorAll("a[href*='/status/'][href*='/video/']");
+    videoLinks.forEach((link) => {
+        const href = link.href || link.getAttribute("href") || "";
+        if (!href || media.videoPageUrls.includes(href)) return;
+        media.videoPageUrls.push(href);
     });
 
     const excludePatterns = ["profile_images", "emoji", "hashflag"];
@@ -160,6 +186,8 @@ window.showStoredPosts = async function () {
         author: post.author ? `${post.author.name} (${post.author.handle})` : "",
         postedAt: post.postedAt || "",
         text: post.text.slice(0, 80) + (post.text.length > 80 ? "..." : ""),
+        images: (post.media?.images || []).join("\n"),
+        videoThumbnails: (post.media?.videoThumbnails || []).join("\n"),
         capturedAt: new Date(post.capturedAt).toLocaleString(),
     })));
     return posts;

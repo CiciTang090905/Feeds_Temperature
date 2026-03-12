@@ -30,9 +30,27 @@ function getTweetText(tweetArticle) {
     return node ? node.innerText : "";
 }
 
-function getTweetImageOrVideo(tweetArticle) {
-    const node = tweetArticle.querySelector('img');
-    return node ? node.src : "";
+function getTweetMedia(tweetArticle) {
+    const media = { images: [], videos: [] };
+
+    const excludePatterns = ["profile_images", "emoji", "hashflag"];
+
+    const videos = tweetArticle.querySelectorAll("video[src], video source[src]");
+    videos.forEach((videoEl) => {
+        const src = videoEl.src || videoEl.getAttribute("src") || "";
+        if (!src || media.videos.includes(src)) return;
+        media.videos.push(src);
+    });
+
+    const imgs = tweetArticle.querySelectorAll("img[src]");
+    imgs.forEach((img) => {
+        const src = img.src;
+        if (!src || media.images.includes(src)) return;
+        if (excludePatterns.some((pattern) => src.includes(pattern))) return;
+        media.images.push(src);
+    });
+
+    return media;
 }
 
 
@@ -77,14 +95,14 @@ function captureVisibleTweets() {
         if (seenIds.has(tweetId)) return;
 
         const text = getTweetText(article);
-        const imageOrVideo = getTweetImageOrVideo(article);
+        const media = getTweetMedia(article);
         if (!text) return;
 
         seenIds.add(tweetId);
         newPosts.push({
             tweetId,
             text,
-            imageOrVideo,
+            media,
             capturedAt: Date.now(),
         });
     });
@@ -129,6 +147,8 @@ function showStoredPosts() {
         posts.map((p) => ({
             tweetId: p.tweetId,
             text: p.text.slice(0, 80) + (p.text.length > 80 ? "…" : ""),
+            imageSrcs: (p.media?.images || (p.imageOrVideo ? [p.imageOrVideo] : [])).join("\n"),
+            videoSrcs: (p.media?.videos || []).join("\n"),
             captured: new Date(p.capturedAt).toLocaleString(),
         }))
     );
