@@ -48,36 +48,13 @@ function getTweetDate(tweetArticle) {
 }
 
 function getTweetMedia(tweetArticle) {
-    const media = { images: [], videoThumbnails: [], videoSources: [], videoPageUrls: [] };
-    const isUsefulSourceUrl = (url) => {
-        if (!url) return false;
-        return !url.startsWith("blob:") && !url.startsWith("data:");
-    };
+    const media = { images: [], videoThumbnails: [] };
 
     const videos = tweetArticle.querySelectorAll("video");
     videos.forEach((video) => {
         if (video.poster && !media.videoThumbnails.includes(video.poster)) {
             media.videoThumbnails.push(video.poster);
         }
-
-        const directVideoSrc = video.currentSrc || video.src || "";
-        if (isUsefulSourceUrl(directVideoSrc) && !media.videoSources.includes(directVideoSrc)) {
-            media.videoSources.push(directVideoSrc);
-        }
-    });
-
-    const videoSources = tweetArticle.querySelectorAll("video source[src]");
-    videoSources.forEach((source) => {
-        const src = source.src || source.getAttribute("src") || "";
-        if (!isUsefulSourceUrl(src) || media.videoSources.includes(src)) return;
-        media.videoSources.push(src);
-    });
-
-    const videoLinks = tweetArticle.querySelectorAll("a[href*='/status/'][href*='/video/']");
-    videoLinks.forEach((link) => {
-        const href = link.href || link.getAttribute("href") || "";
-        if (!href || media.videoPageUrls.includes(href)) return;
-        media.videoPageUrls.push(href);
     });
 
     const excludePatterns = ["profile_images", "emoji", "hashflag"];
@@ -91,7 +68,6 @@ function getTweetMedia(tweetArticle) {
             media.videoThumbnails.push(src);
             return;
         }
-
         if (src.includes("pbs.twimg.com/media") || src.includes("pbs.twimg.com/card_img")) {
             media.images.push(src);
         }
