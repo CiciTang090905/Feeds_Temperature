@@ -4,80 +4,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extension Options</title>
+    <title>Feeds_temperature Settings</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            padding: 20px;
-            max-width: 600px;
+            max-width: 680px;
             margin: 0 auto;
+            padding: 24px;
+            color: #17202a;
         }
 
         h1 {
-            color: #4285f4;
+            margin-top: 0;
         }
 
-        .form-group {
-            margin-bottom: 20px;
+        .card {
+            border: 1px solid #d9e1ea;
+            border-radius: 12px;
+            padding: 16px;
+            background: #ffffff;
         }
 
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-
-        input[type="text"] {
-            width: 80%;
-            padding: 8px;
-            box-sizing: border-box;
-            border: 1.5px solid #000000;
-            border-radius: 4px;
-        }
-
-        button {
-            background-color: #4285f4;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #3367d6;
-        }
-
-        .success-message {
-            color: green;
-            margin-top: 10px;
-            display: none;
+        p {
+            line-height: 1.6;
         }
     </style>
 </head>
 
 <body>
-    <h1>Sentiment Analysis Settings</h1>
-
-    <div class="form-group">
-        <label for="api_key">Gemini API Key</label>
-        <input type="text" id="api-key" placeholder="Enter your Gemini API key" />
-
-        <p>
-            Get you API key from
-            <a href="https://makersuite.google.com/app/apikey" target="_blank">
-                Google AI Studio
-            </a>
-        </p>
-
-        <button id="save-button">Save Settings</button>
-        <p id="success-message" class="success-message">
-            Settings saved successfully
-        </p>
-
-        <script src="options.js"></script>
-
+    <h1>Feeds_temperature</h1>
+    <div class="card">
+        <p>This extension currently captures visible X posts into <code>chrome.storage.local</code>.</p>
+        <p>Captured posts in local storage: <strong id="post-count">0</strong></p>
+        <p>Backend sync is not wired yet. This page is reserved for future capture and backend settings.</p>
     </div>
+    <script src="options.js"></script>
 </body>
 
 </html>
