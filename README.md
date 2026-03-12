@@ -32,4 +32,4 @@ The content script exposes:
 
 ## AI Summary Prototype
 
-The original AI summary extension has been preserved under `legacy-summary-extension/` so it can live in a separate repository.
+The original AI summary extension has been moved to `local-repos/ai-summary-extension/` as a separate local git repository so it stays isolated from this project.
