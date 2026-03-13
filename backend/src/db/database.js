@@ -25,6 +25,7 @@ function getDb() {
     return dbInstance;
 }
 
+//these two for conversion, so we can use async/await with sqlite3 which is callback based
 function run(sql, params = []) { //write type query
     const db = getDb();
     return new Promise((resolve, reject) => {

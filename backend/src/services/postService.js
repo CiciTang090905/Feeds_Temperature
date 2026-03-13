@@ -9,7 +9,7 @@ async function ingestPosts(posts) {
     const duplicateIds = [];
 
     for (const post of posts) {
-        const key = buildPostKey(post);
+        const key = buildPostKey(post); //ex. "x:1234567890"
         const receivedAt = new Date().toISOString();
 
         try {
@@ -27,6 +27,7 @@ async function ingestPosts(posts) {
                         received_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
+                //params for replacing the ? in the SQL query, in order
                 [
                     post.platform,
                     post.tweetId,
@@ -40,7 +41,7 @@ async function ingestPosts(posts) {
                 ]
             );
 
-            if (result.changes === 0) {
+            if (result.changes === 0) { //if duplicate, changes will be 0
                 duplicateIds.push(post.tweetId);
                 continue;
             }
@@ -74,7 +75,8 @@ async function getAllPosts() {
             received_at
         FROM posts
         ORDER BY id DESC
-    `);
+    `); //from posts table
+    //id for keep track of each row
 
     return rows.map((row) => ({
         platform: row.platform,

@@ -136,6 +136,22 @@ async function captureVisibleTweets() {
 
     await saveCapturedPosts(stored.concat(uniquePosts));
     console.log(`Captured ${uniquePosts.length} new X post(s).`);
+
+    chrome.runtime.sendMessage({
+        type: "RECORD_CAPTURE_ACTIVITY",
+        capturedCount: uniquePosts.length,
+        lastCapturedAt: uniquePosts[uniquePosts.length - 1].capturedAt,
+    }, () => {
+        if (chrome.runtime.lastError) {
+            console.warn("Capture activity update failed:", chrome.runtime.lastError.message);
+        }
+    });
+
+    chrome.runtime.sendMessage({ type: "SYNC_CAPTURED_POSTS" }, () => {
+        if (chrome.runtime.lastError) {
+            console.warn("Background sync trigger failed:", chrome.runtime.lastError.message);
+        }
+    });
 }
 
 let captureTimerId = null;
