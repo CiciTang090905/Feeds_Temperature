@@ -20,9 +20,23 @@ async function labelOnce() {
         console.log(`Found ${posts.length} unlabeled post(s).`);
 
         for (const post of posts) {
-            const result = await classifyPostText(post.text);
-            await postService.savePostLabel(post.id, result.label);
-            console.log(`Labeled post ${post.id}: ${result.label}`);
+            try {
+                const result = await classifyPostText(post.text);
+                await postService.savePostLabel(post.id, result.label);
+                console.log(`Labeled post ${post.id}: ${result.label}`);
+            } catch (error) {
+                if (error.code === "CONTENT_FILTER") {
+                    // Skip repeated retries for posts blocked by provider-side content filtering.
+                    await postService.savePostLabel(post.id, 0);
+                    console.warn(
+                        `Skipped post ${post.id} due to content filtering (${error.filterCategory || "unknown"}). Saved fallback label 0.`
+                    );
+                    continue;
+                }
+
+                // Keep the batch moving when one post fails for a transient/non-filter reason.
+                console.error(`Failed labeling post ${post.id}:`, error.message);
+            }
         }
     } catch (error) {
         console.error("labelWorker failed:", error.message);

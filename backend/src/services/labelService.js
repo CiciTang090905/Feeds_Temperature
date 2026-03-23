@@ -62,7 +62,20 @@ async function classifyPostText(postText) {
     });
 
     if (!response.ok) {
-        throw new Error(`Azure OpenAI request failed: ${response.status} ${await response.text()}`);
+        const responseText = await response.text();
+        const filterInfo = parseContentFilterError(responseText);
+
+        if (filterInfo.isContentFilter) {
+            // Use a typed error so the worker can safely apply fallback logic.
+            const error = new Error(
+                `Azure OpenAI request failed: ${response.status} content_filter (${filterInfo.category || "unknown"})`
+            );
+            error.code = "CONTENT_FILTER";
+            error.filterCategory = filterInfo.category || null;
+            throw error;
+        }
+
+        throw new Error(`Azure OpenAI request failed: ${response.status} ${responseText}`);
     }
 
     const data = await response.json();
@@ -77,6 +90,29 @@ async function classifyPostText(postText) {
         label: Number(match[0]),
         model: data.model || deployment,
         rawOutput: output,
+    };
+}
+
+function parseContentFilterError(responseText) {
+    try {
+        const payload = JSON.parse(responseText);
+        const code = payload?.error?.code;
+        const jailbreak = payload?.error?.innererror?.content_filter_result?.jailbreak;
+
+        // Normalize provider-specific payload into a stable category for worker handling.
+        if (code === "content_filter") {
+            return {
+                isContentFilter: true,
+                category: jailbreak?.detected ? "jailbreak" : "content_filter",
+            };
+        }
+    } catch (error) {
+        // Keep default false when payload is not JSON.
+    }
+
+    return {
+        isContentFilter: false,
+        category: null,
     };
 }
 
