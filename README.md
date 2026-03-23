@@ -1,4 +1,4 @@
-# Feeds_temperature
+# Feeds_Temperature
 
 Chrome extension + local backend for capturing visible X/Twitter posts, syncing them to SQLite, and auto-labeling high-arousal negative emotion (`han_label` = `0/1`).
 
