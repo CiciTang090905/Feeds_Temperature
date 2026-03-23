@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "label:one": "node scripts/labelOnePost.js"
+    "label:one": "node scripts/labelOnePost.js",
+    "label:all": "node scripts/labelUnlabeledPosts.js",
+    "label:watch": "node scripts/labelUnlabeledPosts.js --watch",
+    "labels:show": "node scripts/showLatestLabels.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -1,32 +1,21 @@
 const fs = require("fs");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
-//SQLite database for storing posts, using sqlite3 package. Database file is located 
-// at data/feeds-temperature.db. If the file doesn't exist, 
-// it will be created automatically when we connect to it. The initializeDatabase 
-// function creates the posts table if it doesn't already exist, with columns for id, 
-// platform, tweet_id, author_json, posted_at, text, media_json, captured_at, 
-// page_url, and received_at. The run and all functions are helper functions for 
-// running SQL queries against the database.
 
-//resolve gives full absolute path
-const dataDir = path.resolve(__dirname, "../../data"); //backend/src/db/ --> back two levels
+const dataDir = path.resolve(__dirname, "../../data");
 const dbPath = path.join(dataDir, "feeds-temperature.db");
-//backend/data/feeds-temperature.db
 
-//stores the database connection once it is created
 let dbInstance = null;
 
 function getDb() {
     if (dbInstance) return dbInstance;
 
     fs.mkdirSync(dataDir, { recursive: true });
-    dbInstance = new sqlite3.Database(dbPath); //creates a connection to an SQLite database file
+    dbInstance = new sqlite3.Database(dbPath);
     return dbInstance;
 }
 
-//these two for conversion, so we can use async/await with sqlite3 which is callback based
-function run(sql, params = []) { //write type query
+function run(sql, params = []) {
     const db = getDb();
     return new Promise((resolve, reject) => {
         db.run(sql, params, function onRun(err) {
@@ -43,7 +32,7 @@ function run(sql, params = []) { //write type query
     });
 }
 
-function all(sql, params = []) {//read type query   
+function all(sql, params = []) {
     const db = getDb();
     return new Promise((resolve, reject) => {
         db.all(sql, params, (err, rows) => {
@@ -57,6 +46,69 @@ function all(sql, params = []) {//read type query
     });
 }
 
+async function hasColumn(tableName, columnName) {
+    const columns = await all(`PRAGMA table_info(${tableName})`);
+    return columns.some((column) => column.name === columnName);
+}
+
+async function migratePostsTable() {
+    const hasPageUrl = await hasColumn("posts", "page_url");
+    const hasLabel = await hasColumn("posts", "han_label");
+    const hasLabelModel = await hasColumn("posts", "label_model");
+    const hasLabelError = await hasColumn("posts", "label_error");
+
+    if (hasPageUrl || hasLabelModel || hasLabelError) {
+        await run("ALTER TABLE posts RENAME TO posts_old");
+        await run(`
+            CREATE TABLE posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL,
+                tweet_id TEXT NOT NULL,
+                author_json TEXT,
+                posted_at TEXT,
+                text TEXT NOT NULL,
+                media_json TEXT,
+                captured_at INTEGER,
+                received_at TEXT NOT NULL,
+                han_label INTEGER,
+                UNIQUE(platform, tweet_id)
+            )
+        `);
+        await run(`
+            INSERT INTO posts (
+                id,
+                platform,
+                tweet_id,
+                author_json,
+                posted_at,
+                text,
+                media_json,
+                captured_at,
+                received_at,
+                han_label
+            )
+            SELECT
+                id,
+                platform,
+                tweet_id,
+                author_json,
+                posted_at,
+                text,
+                media_json,
+                captured_at,
+                received_at,
+                han_label
+            FROM posts_old
+        `);
+        await run("DROP TABLE posts_old");
+        return;
+    }
+
+    if (!hasLabel) {
+        await run("ALTER TABLE posts ADD COLUMN han_label INTEGER");
+    }
+}
+
 async function initializeDatabase() {
     await run(`
         CREATE TABLE IF NOT EXISTS posts (
@@ -68,14 +120,13 @@ async function initializeDatabase() {
             text TEXT NOT NULL,
             media_json TEXT,
             captured_at INTEGER,
-            page_url TEXT,
             received_at TEXT NOT NULL,
+            han_label INTEGER,
             UNIQUE(platform, tweet_id)
         )
     `);
-    //reject duplicate posts 
 
-
+    await migratePostsTable();
 }
 
 module.exports = {

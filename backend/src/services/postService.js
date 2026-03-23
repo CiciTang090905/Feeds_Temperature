@@ -9,7 +9,7 @@ async function ingestPosts(posts) {
     const duplicateIds = [];
 
     for (const post of posts) {
-        const key = buildPostKey(post); //ex. "x:1234567890"
+        const key = buildPostKey(post);
         const receivedAt = new Date().toISOString();
 
         try {
@@ -23,11 +23,9 @@ async function ingestPosts(posts) {
                         text,
                         media_json,
                         captured_at,
-                        page_url,
                         received_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 `,
-                //params for replacing the ? in the SQL query, in order
                 [
                     post.platform,
                     post.tweetId,
@@ -36,12 +34,11 @@ async function ingestPosts(posts) {
                     post.text,
                     JSON.stringify(post.media || null),
                     post.capturedAt || null,
-                    post.pageUrl || null,
                     receivedAt,
                 ]
             );
 
-            if (result.changes === 0) { //if duplicate, changes will be 0
+            if (result.changes === 0) {
                 duplicateIds.push(post.tweetId);
                 continue;
             }
@@ -64,6 +61,7 @@ async function ingestPosts(posts) {
 async function getAllPosts() {
     const rows = await db.all(`
         SELECT
+            id,
             platform,
             tweet_id,
             author_json,
@@ -71,14 +69,54 @@ async function getAllPosts() {
             text,
             media_json,
             captured_at,
-            page_url,
-            received_at
+            received_at,
+            han_label
         FROM posts
         ORDER BY id DESC
-    `); //from posts table
-    //id for keep track of each row
+    `);
 
-    return rows.map((row) => ({
+    return rows.map(mapRowToPost);
+}
+
+async function getUnlabeledPosts(limit = 25) {
+    const rows = await db.all(
+        `
+            SELECT
+                id,
+                platform,
+                tweet_id,
+                author_json,
+                posted_at,
+                text,
+                media_json,
+                captured_at,
+                received_at,
+                han_label
+            FROM posts
+            WHERE han_label IS NULL
+            ORDER BY id ASC
+            LIMIT ?
+        `,
+        [limit]
+    );
+
+    return rows.map(mapRowToPost);
+}
+
+async function savePostLabel(id, label) {
+    await db.run(
+        `
+            UPDATE posts
+            SET han_label = ?
+            WHERE id = ?
+        `,
+        [label, id]
+    );
+}
+
+function mapRowToPost(row) {
+    return {
+        id: row.id,
         platform: row.platform,
         tweetId: row.tweet_id,
         author: row.author_json ? JSON.parse(row.author_json) : null,
@@ -86,12 +124,14 @@ async function getAllPosts() {
         text: row.text,
         media: row.media_json ? JSON.parse(row.media_json) : null,
         capturedAt: row.captured_at,
-        pageUrl: row.page_url,
         receivedAt: row.received_at,
-    }));
+        hanLabel: row.han_label,
+    };
 }
 
 module.exports = {
-    ingestPosts,
     getAllPosts,
+    getUnlabeledPosts,
+    ingestPosts,
+    savePostLabel,
 };
