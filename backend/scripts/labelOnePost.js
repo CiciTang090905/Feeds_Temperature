@@ -3,7 +3,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 const sqlite3 = require("sqlite3").verbose();
 
-loadEnv();
+dotenv.config({ path: path.join(process.cwd(), ".env") });
 
 const PROMPT_TEMPLATE = `Classify the following social media post.
 
@@ -30,139 +30,144 @@ Post
 {POST}`;
 
 async function main() {
-    const postText = await getLatestPostText();
-    if (!postText) {
-        console.error("No posts found in the database.");
-        process.exit(1);
-    }
-
+    const postText = await resolveInputText(process.argv.slice(2));
     const prompt = PROMPT_TEMPLATE.replace("{POST}", postText);
-    const config = getAzureConfig();
-    const rawOutput = await classifyPost(prompt, config);
-    const label = normalizeLabel(rawOutput);
+    const result = await classifyPost(prompt);
 
     console.log("INPUT:");
     console.log(postText);
     console.log("");
     console.log("OUTPUT:");
-    console.log(label);
+    console.log(result.label);
+
+    if (!String(result.label).trim()) {
+        console.log("");
+        console.log("RAW RESPONSE JSON:");
+        console.log(JSON.stringify(result.raw, null, 2));
+    }
 }
 
-function loadEnv() {
-    const envPath = path.join(process.cwd(), ".env");
-    if (!fs.existsSync(envPath)) {
-        console.error("Missing backend/.env. Create it locally with your Azure OpenAI settings.");
-        process.exit(1);
+async function resolveInputText(args) {
+    if (args[0] === "--text") {
+        const rawText = args.slice(1).join(" ").trim();
+        if (!rawText) {
+            throw new Error("Provide text after --text.");
+        }
+
+        return rawText;
     }
 
-    dotenv.config({ path: envPath });
+    const postId = args[0];
+    return getPostText(postId);
 }
 
-function normalizeEnvValue(value) {
-    if (!value) return "";
-    return value.trim().replace(/^['"]|['"]$/g, "");
-}
-
-function getAzureConfig() {
-    const endpoint = normalizeEnvValue(process.env.AZURE_OPENAI_ENDPOINT);
-    const apiKey = normalizeEnvValue(
-        process.env.AZURE_OPENAI_API_KEY || process.env.AZURE_OPENAI_KEY
-    );
-    const deployment = normalizeEnvValue(process.env.AZURE_OPENAI_DEPLOYMENT);
-    const apiVersion = normalizeEnvValue(process.env.AZURE_OPENAI_API_VERSION);
-
-    if (!endpoint || !apiKey || !deployment) {
-        console.error(
-            "Missing Azure OpenAI config in backend/.env. Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY (or AZURE_OPENAI_API_KEY), and AZURE_OPENAI_DEPLOYMENT."
-        );
-        process.exit(1);
-    }
-
-    return {
-        endpoint,
-        apiKey,
-        deployment,
-        apiVersion,
-    };
-}
-
-function getLatestPostText() {
+function getPostText(postId) {
     const dbPath = path.resolve(__dirname, "../data/feeds-temperature.db");
+    const sql = postId
+        ? "SELECT text FROM posts WHERE id = ?"
+        : "SELECT text FROM posts ORDER BY id DESC LIMIT 1";
+    const params = postId ? [postId] : [];
 
     return new Promise((resolve, reject) => {
-        const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (error) => {
-            if (error) {
-                reject(error);
-            }
+        const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (openError) => {
+            if (openError) reject(openError);
         });
 
-        db.get(
-            "SELECT text FROM posts ORDER BY id DESC LIMIT 1",
-            [],
-            (error, row) => {
-                db.close();
+        db.get(sql, params, (error, row) => {
+            db.close();
 
-                if (error) {
-                    reject(error);
-                    return;
-                }
-
-                resolve(row ? row.text : null);
+            if (error) {
+                reject(error);
+                return;
             }
-        );
+
+            if (!row || !row.text) {
+                reject(new Error("No posts found in the database."));
+                return;
+            }
+
+            resolve(row.text);
+        });
     });
 }
 
-async function classifyPost(prompt, config) {
-    const baseUrl = buildBaseUrl(config.endpoint);
-    const url = new URL("responses", baseUrl);
+async function classifyPost(prompt) {
+    const endpoint = clean(process.env.AZURE_OPENAI_ENDPOINT);
+    const apiKey = clean(process.env.AZURE_OPENAI_KEY || process.env.AZURE_OPENAI_API_KEY);
+    const deployment = clean(process.env.AZURE_OPENAI_DEPLOYMENT);
+    const apiVersion = clean(process.env.AZURE_OPENAI_API_VERSION) || "2024-10-21";
 
-    if (config.apiVersion) {
-        url.searchParams.set("api-version", config.apiVersion);
+    if (!endpoint || !apiKey || !deployment) {
+        throw new Error("Missing Azure OpenAI settings in backend/.env.");
     }
+
+    const base = endpoint.replace(/\/+$/, "");
+    const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
 
     const response = await fetch(url, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${config.apiKey}`,
+            "api-key": apiKey,
         },
         body: JSON.stringify({
-            model: config.deployment,
-            input: prompt,
+            messages: [
+                {
+                    role: "developer",
+                    content: "Return exactly one character: 0 or 1.",
+                },
+                { role: "user", content: prompt },
+            ],
+            max_completion_tokens: 64,
+            reasoning_effort: "minimal",
         }),
     });
 
     if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Azure OpenAI request failed: ${response.status} ${errorText}`);
+        throw new Error(`Azure OpenAI request failed: ${response.status} ${await response.text()}`);
     }
 
     const data = await response.json();
-    return data.output_text || "";
+    const output = extractChatOutput(data);
+    const match = String(output).match(/[01]/);
+
+    return {
+        label: match ? match[0] : String(output).trim(),
+        raw: data,
+    };
 }
 
-function buildBaseUrl(endpoint) {
-    const trimmed = endpoint.replace(/\/+$/, "");
-    if (trimmed.endsWith("/openai/v1")) {
-        return `${trimmed}/`;
+function extractChatOutput(data) {
+    const messageContent = data?.choices?.[0]?.message?.content;
+
+    if (typeof messageContent === "string") {
+        return messageContent;
     }
 
-    return `${trimmed}/openai/v1/`;
+    if (Array.isArray(messageContent)) {
+        const text = messageContent
+            .map((item) => {
+                if (typeof item === "string") return item;
+                if (typeof item?.text === "string") return item.text;
+                if (typeof item?.value === "string") return item.value;
+                return "";
+            })
+            .join("\n")
+            .trim();
+
+        if (text) return text;
+    }
+
+    if (typeof data?.choices?.[0]?.text === "string") {
+        return data.choices[0].text;
+    }
+
+    return "";
 }
 
-function normalizeLabel(outputText) {
-    const cleaned = String(outputText).trim();
-    if (cleaned === "0" || cleaned === "1") {
-        return cleaned;
-    }
-
-    const match = cleaned.match(/\b[01]\b/);
-    if (match) {
-        return match[0];
-    }
-
-    throw new Error(`Model returned unexpected output: ${cleaned}`);
+function clean(value) {
+    if (!value) return "";
+    return value.trim().replace(/^['"]|['"]$/g, "");
 }
 
 main().catch((error) => {
