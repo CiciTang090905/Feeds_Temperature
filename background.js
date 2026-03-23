@@ -4,6 +4,13 @@ const SYNC_STATUS_KEY = "capture_sync_status";
 const BACKEND_BATCH_URL = "http://localhost:3001/api/posts/batch";
 const BACKEND_POSTS_URL = "http://localhost:3001/api/posts";
 const MAX_BATCH_SIZE = 25;
+// Retry failed sync attempts so pending local posts can drain automatically.
+const SYNC_RETRY_INTERVAL_MS = 5000;
+
+// Prevent overlapping sync requests from racing each other.
+let syncInProgress = false;
+// Keep a single scheduled retry at a time.
+let retryTimer = null;
 
 chrome.runtime.onInstalled.addListener(() => {
     console.log("Feeds_temperature extension installed");
@@ -72,21 +79,27 @@ async function fetchBackendPostStats() {
 }
 
 async function syncCapturedPosts() {
-    const posts = await getStoredPosts();
-    if (posts.length === 0) {
-        const captureStats = await getCaptureStats();
-        await setSyncStatus({
-            lastSyncedAt: Date.now(),
-            lastResult: "idle",
-            pendingCount: 0,
-            totalUploadedCount: captureStats.totalUploadedCount || 0,
-        });
-        return { ok: true, syncedCount: 0 };
+    if (syncInProgress) {
+        return { ok: false, reason: "sync_in_progress" };
     }
 
-    const batch = posts.slice(0, MAX_BATCH_SIZE);
-
+    syncInProgress = true;
+    let posts = [];
     try {
+        posts = await getStoredPosts();
+        if (posts.length === 0) {
+            const captureStats = await getCaptureStats();
+            await setSyncStatus({
+                lastSyncedAt: Date.now(),
+                lastResult: "idle",
+                pendingCount: 0,
+                totalUploadedCount: captureStats.totalUploadedCount || 0,
+            });
+            clearRetryTimer();
+            return { ok: true, syncedCount: 0 };
+        }
+
+        const batch = posts.slice(0, MAX_BATCH_SIZE);
         const response = await fetch(BACKEND_BATCH_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -117,6 +130,11 @@ async function syncCapturedPosts() {
             totalUploadedCount,
         });
 
+        if (remainingPosts.length > 0) {
+            scheduleRetry();
+        } else {
+            clearRetryTimer();
+        }
         return { ok: true, syncedCount: ackedIds.size };
     } catch (error) {
         const captureStats = await getCaptureStats();
@@ -127,8 +145,29 @@ async function syncCapturedPosts() {
             totalUploadedCount: captureStats.totalUploadedCount || 0,
             error: error.message,
         });
+        scheduleRetry();
         throw error;
+    } finally {
+        syncInProgress = false;
     }
+}
+
+function clearRetryTimer() {
+    if (!retryTimer) return;
+    clearTimeout(retryTimer);
+    retryTimer = null;
+}
+
+function scheduleRetry() {
+    // Debounce retries so repeated failures do not create timer storms.
+    if (retryTimer) return;
+
+    retryTimer = setTimeout(() => {
+        retryTimer = null;
+        syncCapturedPosts().catch(() => {
+            // Error status is already persisted in syncCapturedPosts catch path.
+        });
+    }, SYNC_RETRY_INTERVAL_MS);
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -178,4 +217,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             .catch((error) => sendResponse({ ok: false, error: error.message }));
         return true;
     }
+});
+
+// Try flushing any pending local backlog when the service worker is activated.
+syncCapturedPosts().catch(() => {
+    // Retry scheduling is handled in syncCapturedPosts catch path.
 });
