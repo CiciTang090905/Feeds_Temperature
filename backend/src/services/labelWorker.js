@@ -8,12 +8,18 @@ let isRunning = false;
 let timer = null;
 
 async function labelOnce() {
-    if (isRunning) return;
+    if (isRunning) {
+        console.log("labelWorker check skipped: previous run still in progress");
+        return;
+    }
     isRunning = true;
+    const startedAt = new Date().toISOString();
 
     try {
+        console.log(`labelWorker check starts: ${startedAt}`);
         const posts = await postService.getUnlabeledPosts(DEFAULT_BATCH_SIZE);
         if (posts.length === 0) {
+            console.log("no unlabeled posts found");
             return;
         }
 
@@ -42,6 +48,7 @@ async function labelOnce() {
                 console.error(`processing: ${platform}:${platformPostId} | db_id:${dbId} --> failed (${error.message})`);
             }
         }
+        console.log(`labelWorker check complete: processed ${posts.length} post(s)`);
     } catch (error) {
         console.error("labelWorker failed:", error.message);
     } finally {
