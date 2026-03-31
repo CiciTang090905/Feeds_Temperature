@@ -52,7 +52,18 @@ async function listPosts(req, res, next) {
     }
 }
 
+async function getPostStats(req, res, next) {
+    try {
+        const stats = await postService.getPostStats();
+
+        return res.json(stats);
+    } catch (error) {
+        return next(error);
+    }
+}
+
 module.exports = {
+    getPostStats,
     ingestPostsBatch,
     listPosts,
 };

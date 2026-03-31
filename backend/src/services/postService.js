@@ -84,6 +84,48 @@ async function getAllPosts() {
     return rows.map(mapRowToPost);
 }
 
+async function getPostStats() {
+    const rows = await db.all(`
+        SELECT
+            COUNT(*) AS total_posts,
+            COALESCE(SUM(CASE WHEN han_label = 1 THEN 1 ELSE 0 END), 0) AS highly_negative_arousal,
+            COALESCE(SUM(CASE WHEN partisan_animosity = 1 THEN 1 ELSE 0 END), 0) AS partisan_animosity,
+            COALESCE(SUM(CASE WHEN support_undemocratic_practices = 1 THEN 1 ELSE 0 END), 0) AS support_undemocratic_practices,
+            COALESCE(SUM(CASE WHEN support_partisan_violence = 1 THEN 1 ELSE 0 END), 0) AS support_partisan_violence,
+            COALESCE(SUM(CASE WHEN support_undemocratic_candidates = 1 THEN 1 ELSE 0 END), 0) AS support_undemocratic_candidates,
+            COALESCE(SUM(CASE WHEN opposition_bipartisan_cooperation = 1 THEN 1 ELSE 0 END), 0) AS opposition_bipartisan_cooperation,
+            COALESCE(SUM(CASE WHEN social_distrust = 1 THEN 1 ELSE 0 END), 0) AS social_distrust,
+            COALESCE(SUM(CASE WHEN social_distance = 1 THEN 1 ELSE 0 END), 0) AS social_distance,
+            COALESCE(SUM(CASE WHEN biased_evaluation_politicized_facts = 1 THEN 1 ELSE 0 END), 0) AS biased_evaluation_politicized_facts
+        FROM posts
+    `);
+
+    const row = rows[0] || {};
+    const total = Number(row.total_posts) || 0;
+    const toMetric = (value) => {
+        const count = Number(value) || 0;
+        return {
+            count,
+            percent: total > 0 ? Math.round((count / total) * 100) : 0,
+        };
+    };
+
+    return {
+        totalPostsWatched: total,
+        metrics: {
+            highlyNegativeArousal: toMetric(row.highly_negative_arousal),
+            partisanAnimosity: toMetric(row.partisan_animosity),
+            supportUndemocraticPractices: toMetric(row.support_undemocratic_practices),
+            supportPartisanViolence: toMetric(row.support_partisan_violence),
+            supportUndemocraticCandidates: toMetric(row.support_undemocratic_candidates),
+            oppositionToBipartisanCooperation: toMetric(row.opposition_bipartisan_cooperation),
+            socialDistrust: toMetric(row.social_distrust),
+            socialDistance: toMetric(row.social_distance),
+            biasedEvaluationOfPoliticizedFacts: toMetric(row.biased_evaluation_politicized_facts),
+        },
+    };
+}
+
 async function getUnlabeledPosts(limit = 25) {
     const rows = await db.all(
         `
@@ -171,6 +213,7 @@ function assertValidExtraLabelColumn(column) {
 
 module.exports = {
     getAllPosts,
+    getPostStats,
     getUnlabeledPosts,
     getUnlabeledPostsByLabelColumn,
     ingestPosts,
