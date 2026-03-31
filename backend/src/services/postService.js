@@ -1,4 +1,19 @@
 const db = require("../db/database");
+const { EXTRA_LABELS, EXTRA_LABEL_COLUMNS } = require("../config/labelCatalog");
+
+const SELECT_COLUMNS_SQL = [
+    "id",
+    "platform",
+    "tweet_id",
+    "author_json",
+    "posted_at",
+    "text",
+    "media_json",
+    "captured_at",
+    "received_at",
+    "han_label",
+    ...EXTRA_LABEL_COLUMNS,
+].join(",\n            ");
 
 function buildPostKey(post) {
     return `${post.platform}:${post.tweetId}`;
@@ -61,16 +76,7 @@ async function ingestPosts(posts) {
 async function getAllPosts() {
     const rows = await db.all(`
         SELECT
-            id,
-            platform,
-            tweet_id,
-            author_json,
-            posted_at,
-            text,
-            media_json,
-            captured_at,
-            received_at,
-            han_label
+            ${SELECT_COLUMNS_SQL}
         FROM posts
         ORDER BY id DESC
     `);
@@ -82,18 +88,27 @@ async function getUnlabeledPosts(limit = 25) {
     const rows = await db.all(
         `
             SELECT
-                id,
-                platform,
-                tweet_id,
-                author_json,
-                posted_at,
-                text,
-                media_json,
-                captured_at,
-                received_at,
-                han_label
+                ${SELECT_COLUMNS_SQL}
             FROM posts
             WHERE han_label IS NULL
+            ORDER BY id ASC
+            LIMIT ?
+        `,
+        [limit]
+    );
+
+    return rows.map(mapRowToPost);
+}
+
+async function getUnlabeledPostsByLabelColumn(labelColumn, limit = 25) {
+    assertValidExtraLabelColumn(labelColumn);
+
+    const rows = await db.all(
+        `
+            SELECT
+                ${SELECT_COLUMNS_SQL}
+            FROM posts
+            WHERE ${labelColumn} IS NULL
             ORDER BY id ASC
             LIMIT ?
         `,
@@ -114,7 +129,25 @@ async function savePostLabel(id, label) {
     );
 }
 
+async function savePostLabelByColumn(id, labelColumn, label) {
+    assertValidExtraLabelColumn(labelColumn);
+
+    await db.run(
+        `
+            UPDATE posts
+            SET ${labelColumn} = ?
+            WHERE id = ?
+        `,
+        [label, id]
+    );
+}
+
 function mapRowToPost(row) {
+    const extraLabels = EXTRA_LABELS.reduce((acc, label) => {
+        acc[label.key] = row[label.column];
+        return acc;
+    }, {});
+
     return {
         id: row.id,
         platform: row.platform,
@@ -126,12 +159,21 @@ function mapRowToPost(row) {
         capturedAt: row.captured_at,
         receivedAt: row.received_at,
         hanLabel: row.han_label,
+        extraLabels,
     };
+}
+
+function assertValidExtraLabelColumn(column) {
+    if (!EXTRA_LABEL_COLUMNS.includes(column)) {
+        throw new Error(`Unsupported label column: ${column}`);
+    }
 }
 
 module.exports = {
     getAllPosts,
     getUnlabeledPosts,
+    getUnlabeledPostsByLabelColumn,
     ingestPosts,
     savePostLabel,
+    savePostLabelByColumn,
 };

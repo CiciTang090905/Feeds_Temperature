@@ -1,5 +1,6 @@
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
+const { EXTRA_LABEL_COLUMNS } = require("../src/config/labelCatalog");
 
 const limit = Number(process.argv[2]) || 20;
 const dbPath = path.resolve(__dirname, "../data/feeds-temperature.db");
@@ -16,6 +17,7 @@ db.all(
         SELECT
             id,
             han_label,
+            ${EXTRA_LABEL_COLUMNS.join(",\n            ")},
             substr(text, 1, 120) AS preview
         FROM posts
         ORDER BY id DESC

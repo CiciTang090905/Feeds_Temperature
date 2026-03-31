@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
+const { EXTRA_LABEL_COLUMNS } = require("../config/labelCatalog");
 
 const dataDir = path.resolve(__dirname, "../../data");
 const dbPath = path.join(dataDir, "feeds-temperature.db");
@@ -56,6 +57,7 @@ async function migratePostsTable() {
     const hasLabel = await hasColumn("posts", "han_label");
     const hasLabelModel = await hasColumn("posts", "label_model");
     const hasLabelError = await hasColumn("posts", "label_error");
+    const extraLabelColumnsSql = EXTRA_LABEL_COLUMNS.map((column) => `${column} INTEGER`).join(",\n                ");
 
     if (hasPageUrl || hasLabelModel || hasLabelError) {
         await run("ALTER TABLE posts RENAME TO posts_old");
@@ -71,6 +73,7 @@ async function migratePostsTable() {
                 captured_at INTEGER,
                 received_at TEXT NOT NULL,
                 han_label INTEGER,
+                ${extraLabelColumnsSql},
                 UNIQUE(platform, tweet_id)
             )
         `);
@@ -107,9 +110,18 @@ async function migratePostsTable() {
     if (!hasLabel) {
         await run("ALTER TABLE posts ADD COLUMN han_label INTEGER");
     }
+
+    for (const column of EXTRA_LABEL_COLUMNS) {
+        const hasExtraLabelColumn = await hasColumn("posts", column);
+        if (!hasExtraLabelColumn) {
+            await run(`ALTER TABLE posts ADD COLUMN ${column} INTEGER`);
+        }
+    }
 }
 
 async function initializeDatabase() {
+    const extraLabelColumnsSql = EXTRA_LABEL_COLUMNS.map((column) => `${column} INTEGER`).join(",\n            ");
+
     await run(`
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,6 +134,7 @@ async function initializeDatabase() {
             captured_at INTEGER,
             received_at TEXT NOT NULL,
             han_label INTEGER,
+            ${extraLabelColumnsSql},
             UNIQUE(platform, tweet_id)
         )
     `);
