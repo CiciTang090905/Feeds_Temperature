@@ -1,20 +1,75 @@
-# Feeds_Temperature
+# Feeds Temperature
 
-Chrome extension + local backend for capturing visible X/Twitter posts, syncing them to SQLite, and auto-labeling high-arousal negative emotion (`han_label` = `0/1`).
+Chrome extension + local backend for collecting visible X/Twitter posts, uploading them to SQLite, and labeling political-emotion metrics.
 
-## Architecture
+## What it does
 
-- Extension content script captures visible posts on X/Twitter.
-- Captured posts are first stored in `chrome.storage.local` (`captured_posts`).
-- Background service worker syncs to backend:
-  - `POST http://localhost:3001/api/posts/batch`
-  - retries every 5 seconds when backend is unavailable
-- Backend stores posts in SQLite: `backend/data/feeds-temperature.db`.
-- Label worker polls unlabeled rows and writes `han_label`.
+- Captures visible posts on `x.com` / `twitter.com` in the content script.
+- Stores captured posts locally first in `chrome.storage.local` (`captured_posts`).
+- Uploads local backlog from the background worker to backend in batches.
+- Retries upload every 5 seconds if backend is unavailable.
+- Stores posts in SQLite (`backend/data/feeds-temperature.db`) with dedupe on `platform + tweet_id`.
+- Runs an auto-label worker:
+  - HAN label (`han_label`: high-arousal negative emotion)
+  - extra political/social labels (partisan animosity, social distrust, etc.)
+- Shows an in-page stats panel on X:
+  - draggable
+  - minimize/expand toggle
+  - refreshes every 10 seconds from backend stats API
 
-## Captured payload
+## Data flow (captured -> uploaded -> labeled)
 
-Each captured post includes:
+1. Content script captures visible posts and writes them to local extension storage.
+2. Background script syncs `captured_posts` to backend via `POST /api/posts/batch`.
+3. Backend saves rows in SQLite.
+4. Label worker polls unlabeled rows and writes HAN + extra label columns.
+5. Content script fetches `GET /api/posts/stats` and renders percentages in the panel.
+
+## API endpoints used
+
+- `GET http://localhost:3001/health`
+- `POST http://localhost:3001/api/posts/batch`
+- `GET http://localhost:3001/api/posts`
+- `GET http://localhost:3001/api/posts/stats`
+
+## Local setup
+
+1. Install backend dependencies:
+```bash
+cd backend
+npm install
+```
+2. Create `backend/.env` and set:
+```bash
+PORT=3001
+LABEL_POLL_INTERVAL_MS=10000
+AZURE_OPENAI_ENDPOINT=...
+AZURE_OPENAI_KEY=...
+AZURE_OPENAI_DEPLOYMENT=...
+AZURE_OPENAI_API_VERSION=2024-10-21
+```
+3. Start backend:
+```bash
+npm run dev
+```
+4. Load extension in Chrome:
+- open `chrome://extensions`
+- enable Developer Mode
+- choose "Load unpacked" and select project root
+
+## Backend scripts
+
+Run from `backend/`:
+
+- `npm run dev` -> start backend with auto-reload and label worker
+- `npm run start` -> start backend
+- `npm run label:one -- --text "<post text>"` -> test one input text
+- `npm run label:one -- <db_id>` -> label one DB row by id
+- `npm run label:all` -> one-shot labeling pass
+- `npm run label:watch` -> continuous labeling loop
+- `npm run labels:show` -> print latest labels
+
+## Captured post fields
 
 - `platform`
 - `tweetId`
@@ -25,56 +80,7 @@ Each captured post includes:
 - `capturedAt`
 - `pageUrl`
 
-## Project layout
-
-- `manifest.json`, `content.js`, `background.js`, `popup.*`, `options.*`: extension
-- `backend/`: Express + SQLite + labeling scripts
-
-## Local setup
-
-1. Install backend deps:
-   - `cd backend`
-   - `npm install`
-2. Create backend env file:
-   - create `backend/.env` from the template values below
-3. Fill required values in `backend/.env`:
-   - `PORT=3001`
-   - `LABEL_POLL_INTERVAL_MS=10000`
-   - `AZURE_OPENAI_ENDPOINT=...`
-   - `AZURE_OPENAI_KEY=...`
-   - `AZURE_OPENAI_DEPLOYMENT=...`
-   - `AZURE_OPENAI_API_VERSION=2024-10-21`
-4. Start backend:
-   - `npm run dev`
-5. Load extension in Chrome:
-   - Open `chrome://extensions`
-   - Enable Developer Mode
-   - Load unpacked folder: project root
-
-## Backend scripts
-
-Run from `backend/`:
-
-- `npm run dev`: backend + auto label worker
-- `npm run start`: production-style start
-- `npm run label:one -- --text "<post text>"`: test one text
-- `npm run label:one -- <db_id>`: label a specific DB row by id
-- `npm run label:all`: one-shot labeling for unlabeled posts
-- `npm run label:watch`: continuous labeling loop
-- `npm run labels:show`: show latest labels
-
-## Runtime behavior
-
-- Posts are deduplicated by `UNIQUE(platform, tweet_id)`.
-- DB `id` can have gaps (normal with `INSERT OR IGNORE` + autoincrement).
-- Label worker batch size is 25 posts per run.
-- Worker logs each row as:
-  - `processing: <platform>:<platformPostId> | db_id:<id> --> label:<0|1>`
-- If provider content filtering blocks a row, worker applies fallback label `0` and continues.
-
 ## DevTools helpers on X
-
-The content script exposes:
 
 - `showStoredPosts()`
 - `clearStoredPosts()`
@@ -82,14 +88,14 @@ The content script exposes:
 
 ## Troubleshooting
 
-- Popup shows `Backend unavailable: Failed to fetch`:
-  - backend is not reachable on `http://localhost:3001`
-  - start backend and keep it running: `cd backend && npm run dev`
-  - verify: `curl http://localhost:3001/health`
-- `EADDRINUSE: address already in use :::3001`:
-  - another process is already on port 3001
-  - check: `lsof -nP -iTCP:3001 -sTCP:LISTEN`
-  - stop old process, then restart backend
-- Pending posts not draining:
-  - reload extension after background code changes
-  - confirm backend is running and healthy
+- `Backend unavailable: Failed to fetch`
+  - ensure backend is running on `http://localhost:3001`
+  - run `cd backend && npm run dev`
+  - check `curl http://localhost:3001/health`
+- `EADDRINUSE: address already in use :::3001`
+  - another process already uses port 3001
+  - check `lsof -nP -iTCP:3001 -sTCP:LISTEN`
+  - stop old process and restart backend
+- Pending local posts do not drain
+  - confirm backend is healthy
+  - reload extension after extension code changes
