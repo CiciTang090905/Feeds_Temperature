@@ -1,6 +1,7 @@
 const postService = require("./postService");
 const { classifyPostsForLabel } = require("./labelService");
 const { EXTRA_LABELS } = require("../config/labelCatalog");
+const { notifyStatsUpdated } = require("./statsEvents");
 
 const DEFAULT_INTERVAL_MS = 10000;
 const DEFAULT_BATCH_SIZE = 25;
@@ -26,8 +27,18 @@ async function labelOnce() {
 
     try {
         console.log(`labelWorker check starts: ${startedAt}`);
-        await processHanBatch();
-        await processNextExtraLabelBatch();
+        const hanProcessedCount = await processHanBatch();
+        const extraProcessedCount = await processNextExtraLabelBatch();
+        const totalProcessedCount = (hanProcessedCount || 0) + (extraProcessedCount || 0);
+
+        if (totalProcessedCount > 0) {
+            notifyStatsUpdated({
+                hanProcessedCount: hanProcessedCount || 0,
+                extraProcessedCount: extraProcessedCount || 0,
+                totalProcessedCount,
+            });
+        }
+
         console.log("labelWorker check complete");
     } catch (error) {
         console.error("labelWorker failed:", error.message);
@@ -40,7 +51,7 @@ async function processHanBatch() {
     const posts = await postService.getUnlabeledPosts(DEFAULT_BATCH_SIZE);
     if (posts.length === 0) {
         console.log("no unlabeled high_arousal_negative posts found");
-        return;
+        return 0;
     }
 
     console.log(`Found ${posts.length} unlabeled high_arousal_negative post(s).`);
@@ -60,6 +71,7 @@ async function processHanBatch() {
         }
 
         console.log(`han-label batch complete: processed ${batchResult.results.length} post(s)`);
+        return batchResult.results.length;
     } catch (error) {
         if (error.code === "CONTENT_FILTER") {
             for (const post of posts) {
@@ -71,15 +83,17 @@ async function processHanBatch() {
                 );
             }
             console.warn("han-label batch fallback applied");
-            return;
+            return posts.length;
         }
 
         console.error(`han-label batch failed: ${error.message}`);
+        return 0;
     }
 }
 
 async function processNextExtraLabelBatch() {
     let processedAny = false;
+    let processedCount = 0;
 
     for (const label of EXTRA_LABELS) {
         const posts = await postService.getUnlabeledPostsByLabelColumn(label.column, DEFAULT_BATCH_SIZE);
@@ -100,6 +114,7 @@ async function processNextExtraLabelBatch() {
             }
 
             console.log(`extra-label batch complete for ${label.key}: processed ${batchResult.results.length} post(s)`);
+            processedCount += batchResult.results.length;
         } catch (error) {
             if (error.code === "CONTENT_FILTER") {
                 for (const post of posts) {
@@ -110,17 +125,20 @@ async function processNextExtraLabelBatch() {
                 }
 
                 console.warn(`extra-label batch fallback applied for ${label.key}`);
+                processedCount += posts.length;
                 continue;
             }
 
             console.error(`extra-label batch failed for ${label.key}: ${error.message}`);
-            return;
+            return processedCount;
         }
     }
 
     if (!processedAny) {
         console.log("no unlabeled posts found for extra labels");
     }
+
+    return processedCount;
 }
 
 function startLabelWorker() {

@@ -1,4 +1,5 @@
 const postService = require("../services/postService");
+const { getStatsEventState, onStatsUpdated } = require("../services/statsEvents");
 
 function validatePostsPayload(posts) {
     if (!Array.isArray(posts)) {
@@ -62,8 +63,39 @@ async function getPostStats(req, res, next) {
     }
 }
 
+function streamStatsEvents(req, res) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const writeEvent = (event, payload) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    writeEvent("connected", {
+        ...getStatsEventState(),
+        connectedAt: new Date().toISOString(),
+    });
+
+    const unsubscribe = onStatsUpdated((payload) => {
+        writeEvent("stats_updated", payload);
+    });
+
+    const heartbeat = setInterval(() => {
+        writeEvent("ping", { at: new Date().toISOString() });
+    }, 25000);
+
+    req.on("close", () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+        res.end();
+    });
+}
+
 module.exports = {
     getPostStats,
     ingestPostsBatch,
     listPosts,
+    streamStatsEvents,
 };
