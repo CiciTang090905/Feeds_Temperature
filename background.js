@@ -3,7 +3,7 @@ const CAPTURE_STATS_KEY = "capture_stats";
 const SYNC_STATUS_KEY = "capture_sync_status";
 const BACKEND_BATCH_URL = "http://localhost:3001/api/posts/batch";
 const BACKEND_POSTS_URL = "http://localhost:3001/api/posts";
-const MAX_BATCH_SIZE = 25;
+const MAX_BATCH_SIZE = 15;
 // Retry failed sync attempts so pending local posts can drain automatically.
 const SYNC_RETRY_INTERVAL_MS = 5000;
 

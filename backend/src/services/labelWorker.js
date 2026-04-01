@@ -1,9 +1,17 @@
 const postService = require("./postService");
-const { classifyPostText, classifyPostsForLabel } = require("./labelService");
+const { classifyPostsForLabel } = require("./labelService");
 const { EXTRA_LABELS } = require("../config/labelCatalog");
 
 const DEFAULT_INTERVAL_MS = 10000;
 const DEFAULT_BATCH_SIZE = 25;
+const HAN_BATCH_LABEL_CONFIG = {
+    key: "high_arousal_negative",
+    column: "han_label",
+    name: "high-arousal negative emotion",
+    definition: "activated, intense negativity directed at someone or something",
+    extraGuidance:
+        "Examples: anger, rage, outrage, hostility, insults, aggressive blame. Do not label sadness, worry, fatigue, neutral reporting, or positive emotions.",
+};
 
 let isRunning = false;
 let timer = null;
@@ -37,34 +45,42 @@ async function processHanBatch() {
 
     console.log(`Found ${posts.length} unlabeled high_arousal_negative post(s).`);
 
-    for (const post of posts) {
-        const platform = post.platform || "unknown";
-        const platformPostId = post.tweetId || "unknown";
-        const dbId = post.id;
+    try {
+        const batchResult = await classifyPostsForLabel(posts, HAN_BATCH_LABEL_CONFIG);
 
-        try {
-            const result = await classifyPostText(post.text);
-            await postService.savePostLabel(dbId, result.label);
+        for (const result of batchResult.results) {
+            const post = posts.find((item) => String(item.id) === String(result.id));
+            const platform = post?.platform || "unknown";
+            const platformPostId = post?.tweetId || "unknown";
+
+            await postService.savePostLabel(result.id, result.label);
             console.log(
-                `processing: ${platform}:${platformPostId} | db_id:${dbId} --> high_arousal_negative:${result.label}`
-            );
-        } catch (error) {
-            if (error.code === "CONTENT_FILTER") {
-                await postService.savePostLabel(dbId, 0);
-                console.warn(
-                    `processing: ${platform}:${platformPostId} | db_id:${dbId} --> high_arousal_negative:0 (fallback: ${error.filterCategory || "content_filter"})`
-                );
-                continue;
-            }
-
-            console.error(
-                `processing: ${platform}:${platformPostId} | db_id:${dbId} --> high_arousal_negative failed (${error.message})`
+                `processing: ${platform}:${platformPostId} | db_id:${result.id} --> high_arousal_negative:${result.label}`
             );
         }
+
+        console.log(`han-label batch complete: processed ${batchResult.results.length} post(s)`);
+    } catch (error) {
+        if (error.code === "CONTENT_FILTER") {
+            for (const post of posts) {
+                const platform = post.platform || "unknown";
+                const platformPostId = post.tweetId || "unknown";
+                await postService.savePostLabel(post.id, 0);
+                console.warn(
+                    `processing: ${platform}:${platformPostId} | db_id:${post.id} --> high_arousal_negative:0 (batch fallback: ${error.filterCategory || "content_filter"})`
+                );
+            }
+            console.warn("han-label batch fallback applied");
+            return;
+        }
+
+        console.error(`han-label batch failed: ${error.message}`);
     }
 }
 
 async function processNextExtraLabelBatch() {
+    let processedAny = false;
+
     for (const label of EXTRA_LABELS) {
         const posts = await postService.getUnlabeledPostsByLabelColumn(label.column, DEFAULT_BATCH_SIZE);
 
@@ -72,6 +88,7 @@ async function processNextExtraLabelBatch() {
             continue;
         }
 
+        processedAny = true;
         console.log(`Found ${posts.length} unlabeled post(s) for ${label.key}.`);
 
         try {
@@ -93,18 +110,17 @@ async function processNextExtraLabelBatch() {
                 }
 
                 console.warn(`extra-label batch fallback applied for ${label.key}`);
-                return;
+                continue;
             }
 
             console.error(`extra-label batch failed for ${label.key}: ${error.message}`);
             return;
         }
-
-        // Only one extra label is processed per worker cycle to keep prompts fully isolated.
-        return;
     }
 
-    console.log("no unlabeled posts found for extra labels");
+    if (!processedAny) {
+        console.log("no unlabeled posts found for extra labels");
+    }
 }
 
 function startLabelWorker() {
