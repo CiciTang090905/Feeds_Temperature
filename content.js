@@ -1,6 +1,20 @@
 const CAPTURE_STORAGE_KEY = "captured_posts";
+const BACKEND_STATS_URL = "http://localhost:3001/api/posts/stats";
+const STATS_PANEL_ID = "feeds-temperature-stats-panel";
+const STATS_PANEL_HEADER_ID = "feeds-temperature-stats-panel-header";
+const STATS_PANEL_BODY_ID = "feeds-temperature-stats-panel-body";
+const STATS_PANEL_TOGGLE_ID = "feeds-temperature-stats-panel-toggle";
+const STATS_REFRESH_MS = 10000;
+const PANEL_DEFAULT_HEIGHT = "420px";
+const PANEL_DEFAULT_MIN_HEIGHT = "180px";
 const capturedIds = new Set();
 const tweetIdRegex = /\/status\/([0-9]+)/;
+let statsPanelTimerId = null;
+const panelState = {
+    drag: null,
+    expandedHeight: PANEL_DEFAULT_HEIGHT,
+    expandedMinHeight: PANEL_DEFAULT_MIN_HEIGHT,
+};
 
 function isOnX() {
     return /(^|\.)x\.com$/.test(location.hostname) || /(^|\.)twitter\.com$/.test(location.hostname);
@@ -86,6 +100,312 @@ function isInViewport(element) {
     );
 }
 
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function setStyles(element, styles) {
+    Object.assign(element.style, styles);
+}
+
+function createElement(tagName, styles = {}) {
+    const element = document.createElement(tagName);
+    setStyles(element, styles);
+    return element;
+}
+
+function ensureStatsPanel() {
+    let panel = document.getElementById(STATS_PANEL_ID);
+    if (panel) return panel;
+
+    panel = createElement("div", {
+        position: "fixed",
+        top: "72px",
+        right: "16px",
+        width: "300px",
+        height: PANEL_DEFAULT_HEIGHT,
+        maxHeight: "80vh",
+        minWidth: "260px",
+        minHeight: PANEL_DEFAULT_MIN_HEIGHT,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        resize: "both",
+        borderRadius: "12px",
+        background: "rgba(15, 20, 25, 0.96)",
+        color: "#f7f9f9",
+        border: "1px solid rgba(255, 255, 255, 0.16)",
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.3)",
+        zIndex: "2147483647",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+        fontSize: "13px",
+        lineHeight: "1.45",
+    });
+    panel.id = STATS_PANEL_ID;
+
+    const header = createElement("div", {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px 12px",
+        cursor: "grab",
+        background: "rgba(255, 255, 255, 0.06)",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.14)",
+    });
+    header.id = STATS_PANEL_HEADER_ID;
+    header.textContent = "Feed Temperature";
+
+    const toggleButton = createElement("button", {
+        marginLeft: "10px",
+        width: "24px",
+        height: "24px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "0",
+        border: "1px solid rgba(255, 255, 255, 0.2)",
+        borderRadius: "6px",
+        background: "rgba(255, 255, 255, 0.1)",
+        color: "#f7f9f9",
+        cursor: "pointer",
+        fontSize: "16px",
+        lineHeight: "24px",
+    });
+    toggleButton.id = STATS_PANEL_TOGGLE_ID;
+    toggleButton.type = "button";
+    toggleButton.textContent = "−";
+    header.appendChild(toggleButton);
+
+    const body = createElement("div", {
+        flex: "1 1 auto",
+        minHeight: "0",
+        padding: "12px",
+        paddingBottom: "20px",
+        overflowY: "auto",
+        overflowX: "hidden",
+        wordBreak: "break-word",
+        overflowWrap: "anywhere",
+    });
+    body.id = STATS_PANEL_BODY_ID;
+    body.textContent = "Loading stats...";
+
+    panel.appendChild(header);
+    panel.appendChild(body);
+    document.body.appendChild(panel);
+
+    wireStatsPanelInteractions(panel, header, body, toggleButton);
+
+    return panel;
+}
+
+function wireStatsPanelInteractions(panel, header, body, toggleButton) {
+    header.addEventListener("mousedown", (event) => {
+        if (event.button !== 0) return;
+        if (event.target === toggleButton) return;
+
+        const rect = panel.getBoundingClientRect();
+        panelState.drag = {
+            offsetX: event.clientX - rect.left,
+            offsetY: event.clientY - rect.top,
+        };
+
+        panel.style.left = `${rect.left}px`;
+        panel.style.top = `${rect.top}px`;
+        panel.style.right = "auto";
+        header.style.cursor = "grabbing";
+        event.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (event) => {
+        if (!panelState.drag) return;
+
+        const nextLeft = clamp(event.clientX - panelState.drag.offsetX, 8, window.innerWidth - panel.offsetWidth - 8);
+        const nextTop = clamp(event.clientY - panelState.drag.offsetY, 8, window.innerHeight - panel.offsetHeight - 8);
+
+        panel.style.left = `${nextLeft}px`;
+        panel.style.top = `${nextTop}px`;
+    });
+
+    document.addEventListener("mouseup", () => {
+        if (!panelState.drag) return;
+        panelState.drag = null;
+        header.style.cursor = "grab";
+    });
+
+    toggleButton.addEventListener("click", () => {
+        const isMinimized = body.style.display === "none";
+        if (isMinimized) {
+            body.style.display = "block";
+            panel.style.height = panelState.expandedHeight;
+            panel.style.minHeight = panelState.expandedMinHeight;
+            panel.style.resize = "both";
+            toggleButton.textContent = "−";
+        } else {
+            // Preserve expanded size so users keep their preferred panel dimensions.
+            panelState.expandedHeight = panel.style.height || `${panel.offsetHeight}px`;
+            panelState.expandedMinHeight = panel.style.minHeight || PANEL_DEFAULT_MIN_HEIGHT;
+            body.style.display = "none";
+            panel.style.height = `${header.offsetHeight}px`;
+            panel.style.minHeight = `${header.offsetHeight}px`;
+            panel.style.resize = "none";
+            toggleButton.textContent = "+";
+        }
+    });
+}
+
+const METRIC_ROWS = [
+    { key: "highlyNegativeArousal", label: "Highly negative arousal" },
+    { key: "partisanAnimosity", label: "Partisan animosity" },
+    { key: "supportUndemocraticPractices", label: "Support for undemocratic practices" },
+    { key: "supportPartisanViolence", label: "Support for partisan violence" },
+    { key: "supportUndemocraticCandidates", label: "Support for undemocratic candidates" },
+    { key: "oppositionToBipartisanCooperation", label: "Opposition to bipartisan cooperation" },
+    { key: "socialDistrust", label: "Social distrust" },
+    { key: "socialDistance", label: "Social distance" },
+    { key: "biasedEvaluationOfPoliticizedFacts", label: "Biased evaluation of politicized facts" },
+];
+
+function createStatRow(label, value, isStrong = false) {
+    const row = createElement("div", {
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) auto",
+        alignItems: "baseline",
+        columnGap: "10px",
+    });
+
+    const labelEl = createElement("div", {
+        opacity: "0.94",
+        fontWeight: isStrong ? "700" : "500",
+    });
+    labelEl.textContent = label;
+
+    const valueEl = createElement("div", {
+        textAlign: "right",
+        fontWeight: "700",
+        whiteSpace: "nowrap",
+    });
+    valueEl.textContent = value;
+
+    row.appendChild(labelEl);
+    row.appendChild(valueEl);
+    return row;
+}
+
+function createStatsSection(title, sectionStats) {
+    const card = createElement("section", {
+        border: "1px solid rgba(255, 255, 255, 0.12)",
+        borderRadius: "10px",
+        background: "rgba(255, 255, 255, 0.03)",
+        padding: "10px",
+    });
+
+    const heading = createElement("div", {
+        fontSize: "15px",
+        fontWeight: "800",
+        marginBottom: "8px",
+    });
+    heading.textContent = title;
+    card.appendChild(heading);
+
+    const rows = createElement("div", {
+        display: "grid",
+        rowGap: "6px",
+    });
+
+    if (!sectionStats || !sectionStats.metrics) {
+        const empty = createElement("div", {
+            opacity: "0.72",
+            fontSize: "12px",
+        });
+        empty.textContent = "No data available.";
+        rows.appendChild(empty);
+        card.appendChild(rows);
+        return card;
+    }
+
+    rows.appendChild(createStatRow("Posts watched", String(Number(sectionStats.totalPostsWatched) || 0), true));
+    for (const metric of METRIC_ROWS) {
+        const percent = Number(sectionStats.metrics?.[metric.key]?.percent) || 0;
+        rows.appendChild(createStatRow(metric.label, `${percent}%`));
+    }
+
+    card.appendChild(rows);
+    return card;
+}
+
+function renderStatsPanelBody(panelBody, stats) {
+    const container = createElement("div", {
+        display: "grid",
+        rowGap: "10px",
+    });
+
+    // Support both new payload (allTime/last24Hours) and legacy payload.
+    if (stats?.allTime || stats?.last24Hours) {
+        container.appendChild(createStatsSection("All Time", stats.allTime));
+        container.appendChild(createStatsSection("Last 24 Hours", stats.last24Hours));
+    } else {
+        container.appendChild(createStatsSection("All Time", stats));
+        container.appendChild(createStatsSection("Last 24 Hours", null));
+    }
+
+    panelBody.replaceChildren(container);
+}
+
+function keepStatsPanelInViewport() {
+    const panel = document.getElementById(STATS_PANEL_ID);
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    const nextLeft = clamp(rect.left, 8, window.innerWidth - rect.width - 8);
+    const nextTop = clamp(rect.top, 8, window.innerHeight - rect.height - 8);
+
+    panel.style.left = `${nextLeft}px`;
+    panel.style.top = `${nextTop}px`;
+    panel.style.right = "auto";
+}
+
+function observeStatsPanelResize(panel) {
+    if (typeof ResizeObserver !== "function") return;
+
+    const observer = new ResizeObserver(() => {
+        keepStatsPanelInViewport();
+    });
+    observer.observe(panel);
+}
+
+function initStatsPanelViewportHandlers() {
+    window.addEventListener("resize", keepStatsPanelInViewport);
+}
+
+async function refreshStatsPanel() {
+    ensureStatsPanel();
+    const panelBody = document.getElementById(STATS_PANEL_BODY_ID);
+    if (!panelBody) return;
+
+    try {
+        const response = await fetch(BACKEND_STATS_URL);
+        if (!response.ok) {
+            throw new Error(`Backend responded with ${response.status}`);
+        }
+
+        const stats = await response.json();
+        renderStatsPanelBody(panelBody, stats);
+    } catch (error) {
+        panelBody.textContent = "Stats unavailable. Start backend server on localhost:3001.";
+    }
+}
+
+function startStatsPanel() {
+    const panel = ensureStatsPanel();
+    observeStatsPanelResize(panel);
+    initStatsPanelViewportHandlers();
+    keepStatsPanelInViewport();
+    refreshStatsPanel();
+
+    if (statsPanelTimerId) clearInterval(statsPanelTimerId);
+    statsPanelTimerId = setInterval(refreshStatsPanel, STATS_REFRESH_MS);
+}
+
 function loadCapturedPosts() {
     return new Promise((resolve) => {
         chrome.storage.local.get(CAPTURE_STORAGE_KEY, (result) => {
@@ -162,6 +482,7 @@ function startPostCapture() {
     captureStarted = true;
     captureVisibleTweets();
     captureTimerId = setInterval(captureVisibleTweets, 1000);
+    startStatsPanel();
     console.log("Starting X post capture");
 }
 

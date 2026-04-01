@@ -1,5 +1,6 @@
 const db = require("../db/database");
 const { EXTRA_LABELS, EXTRA_LABEL_COLUMNS } = require("../config/labelCatalog");
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SELECT_COLUMNS_SQL = [
     "id",
@@ -14,6 +15,25 @@ const SELECT_COLUMNS_SQL = [
     "han_label",
     ...EXTRA_LABEL_COLUMNS,
 ].join(",\n            ");
+
+const STATS_METRIC_DEFINITIONS = [
+    { responseKey: "highlyNegativeArousal", sourceColumn: "han_label", sqlAlias: "highly_negative_arousal" },
+    { responseKey: "partisanAnimosity", sourceColumn: "partisan_animosity", sqlAlias: "partisan_animosity" },
+    { responseKey: "supportUndemocraticPractices", sourceColumn: "support_undemocratic_practices", sqlAlias: "support_undemocratic_practices" },
+    { responseKey: "supportPartisanViolence", sourceColumn: "support_partisan_violence", sqlAlias: "support_partisan_violence" },
+    { responseKey: "supportUndemocraticCandidates", sourceColumn: "support_undemocratic_candidates", sqlAlias: "support_undemocratic_candidates" },
+    { responseKey: "oppositionToBipartisanCooperation", sourceColumn: "opposition_bipartisan_cooperation", sqlAlias: "opposition_bipartisan_cooperation" },
+    { responseKey: "socialDistrust", sourceColumn: "social_distrust", sqlAlias: "social_distrust" },
+    { responseKey: "socialDistance", sourceColumn: "social_distance", sqlAlias: "social_distance" },
+    { responseKey: "biasedEvaluationOfPoliticizedFacts", sourceColumn: "biased_evaluation_politicized_facts", sqlAlias: "biased_evaluation_politicized_facts" },
+];
+
+const STATS_SELECT_SQL = [
+    "COUNT(*) AS total_posts",
+    ...STATS_METRIC_DEFINITIONS.map(
+        (metric) => `COALESCE(SUM(CASE WHEN ${metric.sourceColumn} = 1 THEN 1 ELSE 0 END), 0) AS ${metric.sqlAlias}`
+    ),
+].join(",\n                ");
 
 function buildPostKey(post) {
     return `${post.platform}:${post.tweetId}`;
@@ -85,44 +105,57 @@ async function getAllPosts() {
 }
 
 async function getPostStats() {
+    const dayAgoMs = Date.now() - DAY_MS;
+    const fullyLabeledWhereClause = buildFullyLabeledWhereClause();
+    const [allTime, last24Hours] = await Promise.all([
+        getAggregatedPostStats(fullyLabeledWhereClause),
+        getAggregatedPostStats(buildWhereClause(fullyLabeledWhereClause, "captured_at IS NOT NULL", "captured_at >= ?"), [dayAgoMs]),
+    ]);
+
+    return {
+        allTime,
+        last24Hours,
+    };
+}
+
+function buildFullyLabeledWhereClause() {
+    const requiredColumns = ["han_label", ...EXTRA_LABEL_COLUMNS];
+    return requiredColumns.map((column) => `${column} IS NOT NULL`).join(" AND ");
+}
+
+function buildWhereClause(...clauses) {
+    return clauses.filter(Boolean).join(" AND ");
+}
+
+async function getAggregatedPostStats(whereClause = "", params = []) {
+    const whereSql = whereClause ? `WHERE ${whereClause}` : "";
     const rows = await db.all(`
         SELECT
-            COUNT(*) AS total_posts,
-            COALESCE(SUM(CASE WHEN han_label = 1 THEN 1 ELSE 0 END), 0) AS highly_negative_arousal,
-            COALESCE(SUM(CASE WHEN partisan_animosity = 1 THEN 1 ELSE 0 END), 0) AS partisan_animosity,
-            COALESCE(SUM(CASE WHEN support_undemocratic_practices = 1 THEN 1 ELSE 0 END), 0) AS support_undemocratic_practices,
-            COALESCE(SUM(CASE WHEN support_partisan_violence = 1 THEN 1 ELSE 0 END), 0) AS support_partisan_violence,
-            COALESCE(SUM(CASE WHEN support_undemocratic_candidates = 1 THEN 1 ELSE 0 END), 0) AS support_undemocratic_candidates,
-            COALESCE(SUM(CASE WHEN opposition_bipartisan_cooperation = 1 THEN 1 ELSE 0 END), 0) AS opposition_bipartisan_cooperation,
-            COALESCE(SUM(CASE WHEN social_distrust = 1 THEN 1 ELSE 0 END), 0) AS social_distrust,
-            COALESCE(SUM(CASE WHEN social_distance = 1 THEN 1 ELSE 0 END), 0) AS social_distance,
-            COALESCE(SUM(CASE WHEN biased_evaluation_politicized_facts = 1 THEN 1 ELSE 0 END), 0) AS biased_evaluation_politicized_facts
+            ${STATS_SELECT_SQL}
         FROM posts
-    `);
+        ${whereSql}
+    `, params);
 
     const row = rows[0] || {};
+    return buildStatsFromRow(row);
+}
+
+function buildStatsFromRow(row) {
     const total = Number(row.total_posts) || 0;
-    const toMetric = (value) => {
-        const count = Number(value) || 0;
-        return {
+    const metrics = {};
+
+    // Keep metric mapping in one place so SQL aliases and response keys stay aligned.
+    for (const metric of STATS_METRIC_DEFINITIONS) {
+        const count = Number(row[metric.sqlAlias]) || 0;
+        metrics[metric.responseKey] = {
             count,
             percent: total > 0 ? Math.round((count / total) * 100) : 0,
         };
-    };
+    }
 
     return {
         totalPostsWatched: total,
-        metrics: {
-            highlyNegativeArousal: toMetric(row.highly_negative_arousal),
-            partisanAnimosity: toMetric(row.partisan_animosity),
-            supportUndemocraticPractices: toMetric(row.support_undemocratic_practices),
-            supportPartisanViolence: toMetric(row.support_partisan_violence),
-            supportUndemocraticCandidates: toMetric(row.support_undemocratic_candidates),
-            oppositionToBipartisanCooperation: toMetric(row.opposition_bipartisan_cooperation),
-            socialDistrust: toMetric(row.social_distrust),
-            socialDistance: toMetric(row.social_distance),
-            biasedEvaluationOfPoliticizedFacts: toMetric(row.biased_evaluation_politicized_facts),
-        },
+        metrics,
     };
 }
 
