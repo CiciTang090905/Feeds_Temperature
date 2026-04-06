@@ -16,6 +16,7 @@ const SELECT_COLUMNS_SQL = [
     "han_label",
     "is_political",
     "label_confidence_json",
+    "label_skip_reason",
     ...EXTRA_LABEL_COLUMNS,
 ].join(",\n            ");
 
@@ -185,8 +186,8 @@ async function getUnlabeledPosts(limit = 25) {
             SELECT
                 ${SELECT_COLUMNS_SQL}
             FROM posts
-            WHERE han_label IS NULL
-               OR is_political IS NULL
+            WHERE (han_label IS NULL OR is_political IS NULL)
+              AND (label_skip_reason IS NULL OR TRIM(label_skip_reason) = '')
             ORDER BY id ASC
             LIMIT ?
         `,
@@ -231,6 +232,7 @@ async function getUnlabeledPostsByLabelColumn(labelColumn, limit = 25) {
                 ${SELECT_COLUMNS_SQL}
             FROM posts
             WHERE ${labelColumn} IS NULL
+              AND (label_skip_reason IS NULL OR TRIM(label_skip_reason) = '')
             ORDER BY id ASC
             LIMIT ?
         `,
@@ -270,7 +272,8 @@ async function saveHanAndPoliticalLabels(id, labels = {}, confidence = {}) {
             UPDATE posts
             SET han_label = ?,
                 is_political = ?,
-                label_confidence_json = ?
+                label_confidence_json = ?,
+                label_skip_reason = NULL
             WHERE id = ?
         `,
         [
@@ -279,6 +282,17 @@ async function saveHanAndPoliticalLabels(id, labels = {}, confidence = {}) {
             JSON.stringify(confidence || {}),
             id,
         ]
+    );
+}
+
+async function markPostLabelSkipped(id, reason) {
+    await db.run(
+        `
+            UPDATE posts
+            SET label_skip_reason = ?
+            WHERE id = ?
+        `,
+        [String(reason || "request_failed_after_retry"), id]
     );
 }
 
@@ -352,6 +366,7 @@ function mapRowToPost(row) {
         hanLabel: row.han_label,
         isPolitical: row.is_political,
         labelConfidence: row.label_confidence_json ? JSON.parse(row.label_confidence_json) : null,
+        labelSkipReason: row.label_skip_reason || null,
         extraLabels,
     };
 }
@@ -369,6 +384,7 @@ module.exports = {
     getUnlabeledPostsForPoliticalSublabels,
     getUnlabeledPostsByLabelColumn,
     ingestPosts,
+    markPostLabelSkipped,
     saveHanAndPoliticalLabels,
     savePostLabel,
     savePostLabelByColumn,

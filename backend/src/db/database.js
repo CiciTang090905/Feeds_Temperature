@@ -57,6 +57,7 @@ async function migratePostsTable() {
     const hasLabel = await hasColumn("posts", "han_label");
     const hasIsPolitical = await hasColumn("posts", "is_political");
     const hasLabelConfidenceJson = await hasColumn("posts", "label_confidence_json");
+    const hasLabelSkipReason = await hasColumn("posts", "label_skip_reason");
     const hasQuotedPost = await hasColumn("posts", "quoted_post");
     const hasQuotedPostJson = await hasColumn("posts", "quoted_post_json");
     const hasLabelModel = await hasColumn("posts", "label_model");
@@ -87,6 +88,7 @@ async function migratePostsTable() {
                 han_label INTEGER,
                 is_political INTEGER,
                 label_confidence_json TEXT,
+                label_skip_reason TEXT,
                 ${extraLabelColumnsSql},
                 UNIQUE(platform, tweet_id)
             )
@@ -105,7 +107,8 @@ async function migratePostsTable() {
                 received_at,
                 han_label,
                 is_political,
-                label_confidence_json
+                label_confidence_json,
+                label_skip_reason
             )
             SELECT
                 id,
@@ -120,7 +123,8 @@ async function migratePostsTable() {
                 received_at,
                 han_label,
                 NULL AS is_political,
-                NULL AS label_confidence_json
+                NULL AS label_confidence_json,
+                NULL AS label_skip_reason
             FROM posts_old
         `);
         await run("DROP TABLE posts_old");
@@ -143,6 +147,10 @@ async function migratePostsTable() {
 
     if (!(await hasColumn("posts", "label_confidence_json"))) {
         await run("ALTER TABLE posts ADD COLUMN label_confidence_json TEXT");
+    }
+
+    if (!hasLabelSkipReason && !(await hasColumn("posts", "label_skip_reason"))) {
+        await run("ALTER TABLE posts ADD COLUMN label_skip_reason TEXT");
     }
 
     if (!(await hasColumn("posts", "quoted_post"))) {
@@ -168,6 +176,7 @@ async function initializeDatabase() {
             han_label INTEGER,
             is_political INTEGER,
             label_confidence_json TEXT,
+            label_skip_reason TEXT,
             ${extraLabelColumnsSql},
             UNIQUE(platform, tweet_id)
         )

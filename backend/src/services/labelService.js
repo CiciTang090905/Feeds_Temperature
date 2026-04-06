@@ -346,16 +346,18 @@ async function runChatCompletion(messages, options = {}) {
         const responseText = await response.text();
         const filterInfo = parseContentFilterError(responseText);
 
-        if (filterInfo.isContentFilter) {
+        if (filterInfo.isContentFilter || filterInfo.isContentPolicyViolation) {
             const error = new Error(
-                `Azure OpenAI request failed: ${response.status} content_filter (${filterInfo.category || "unknown"})`
+                `Azure OpenAI request failed: ${response.status} ${filterInfo.category || "request_failed"}`
             );
-            error.code = "CONTENT_FILTER";
+            error.code = filterInfo.isContentFilter ? "CONTENT_FILTER" : "REQUEST_FAILED";
             error.filterCategory = filterInfo.category || null;
             throw error;
         }
 
-        throw new Error(`Azure OpenAI request failed: ${response.status} ${responseText}`);
+        const error = new Error(`Azure OpenAI request failed: ${response.status} ${responseText}`);
+        error.code = "REQUEST_FAILED";
+        throw error;
     }
 
     return response.json();
@@ -388,7 +390,16 @@ function parseContentFilterError(responseText) {
         if (code === "content_filter") {
             return {
                 isContentFilter: true,
+                isContentPolicyViolation: false,
                 category: jailbreak?.detected ? "jailbreak" : "content_filter",
+            };
+        }
+
+        if (code === "content_policy_violation") {
+            return {
+                isContentFilter: false,
+                isContentPolicyViolation: true,
+                category: "content_policy_violation",
             };
         }
     } catch (error) {
@@ -397,6 +408,7 @@ function parseContentFilterError(responseText) {
 
     return {
         isContentFilter: false,
+        isContentPolicyViolation: false,
         category: null,
     };
 }

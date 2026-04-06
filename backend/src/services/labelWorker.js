@@ -52,7 +52,10 @@ async function processUnlabeledPosts() {
         const imageUrl = extractImageContextUrl(post);
 
         try {
-            const firstPass = await classifyHanAndPolitical(post.text || "", imageUrl, post.quotedPost || null);
+            const firstPass = await classifyFirstPassWithRetry(post, imageUrl);
+            if (!firstPass) {
+                continue;
+            }
 
             await postService.saveHanAndPoliticalLabels(
                 post.id,
@@ -102,6 +105,36 @@ async function processUnlabeledPosts() {
     }
 
     return processedCount;
+}
+
+async function classifyFirstPassWithRetry(post, imageUrl) {
+    const maxAttempts = 2;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+            return await classifyHanAndPolitical(post.text || "", imageUrl, post.quotedPost || null);
+        } catch (error) {
+            const isLastAttempt = attempt === maxAttempts;
+
+            if (error.code === "REQUEST_FAILED" && !isLastAttempt) {
+                console.warn(`first-pass retry: db_id:${post.id} attempt:${attempt + 1}/${maxAttempts}`);
+                continue;
+            }
+
+            if (error.code === "REQUEST_FAILED" && isLastAttempt) {
+                const reason = error.filterCategory || "request_failed_after_retry";
+                await postService.markPostLabelSkipped(post.id, reason);
+                console.warn(
+                    `processing: ${post.platform}:${post.tweetId} | db_id:${post.id} --> skipped (${reason}), labels left NULL`
+                );
+                return null;
+            }
+
+            throw error;
+        }
+    }
+
+    return null;
 }
 
 async function processPoliticalSublabelsForPost(post, imageUrl) {
