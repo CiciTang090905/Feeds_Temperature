@@ -37,8 +37,9 @@ Do not label as political:
 - lifestyle, shopping, or personal updates unless clearly tied to politics or public issues
 
 Evidence rules:
-- Use the post text as primary evidence.
+- Use the top-level author's post text as primary evidence.
 - If an image is attached, use it only as supporting context when it changes or clarifies meaning, tone, target, or emotional framing.
+- If quoted-post context is provided, use it only as secondary context for interpreting the top-level post. Do not shift the label target to the quoted author.
 - Ignore decorative or irrelevant visuals.
 - Do not infer facts not supported by the text or image.
 
@@ -67,8 +68,9 @@ Definitions:
 {LABEL_DEFINITIONS}
 
 Evidence rules:
-- Use the post text as primary evidence.
+- Use the top-level author's post text as primary evidence.
 - If an image is attached, use it only as supporting context when it changes or clarifies meaning, tone, target, or emotional framing.
+- If quoted-post context is provided, use it only as secondary context for interpreting the top-level post. Do not shift the label target to the quoted author.
 - Ignore decorative or irrelevant visuals.
 - Do not infer facts not supported by the text or image.
 

@@ -57,6 +57,7 @@ async function migratePostsTable() {
     const hasLabel = await hasColumn("posts", "han_label");
     const hasIsPolitical = await hasColumn("posts", "is_political");
     const hasLabelConfidenceJson = await hasColumn("posts", "label_confidence_json");
+    const hasQuotedPostJson = await hasColumn("posts", "quoted_post_json");
     const hasLabelModel = await hasColumn("posts", "label_model");
     const hasLabelError = await hasColumn("posts", "label_error");
     const extraLabelColumnsSql = EXTRA_LABEL_COLUMNS.map((column) => `${column} INTEGER`).join(",\n                ");
@@ -72,6 +73,7 @@ async function migratePostsTable() {
                 posted_at TEXT,
                 text TEXT NOT NULL,
                 media_json TEXT,
+                quoted_post_json TEXT,
                 captured_at INTEGER,
                 received_at TEXT NOT NULL,
                 han_label INTEGER,
@@ -90,6 +92,7 @@ async function migratePostsTable() {
                 posted_at,
                 text,
                 media_json,
+                quoted_post_json,
                 captured_at,
                 received_at,
                 han_label,
@@ -104,6 +107,7 @@ async function migratePostsTable() {
                 posted_at,
                 text,
                 media_json,
+                NULL AS quoted_post_json,
                 captured_at,
                 received_at,
                 han_label,
@@ -132,6 +136,10 @@ async function migratePostsTable() {
     if (!hasLabelConfidenceJson) {
         await run("ALTER TABLE posts ADD COLUMN label_confidence_json TEXT");
     }
+
+    if (!hasQuotedPostJson) {
+        await run("ALTER TABLE posts ADD COLUMN quoted_post_json TEXT");
+    }
 }
 
 async function initializeDatabase() {
@@ -146,6 +154,7 @@ async function initializeDatabase() {
             posted_at TEXT,
             text TEXT NOT NULL,
             media_json TEXT,
+            quoted_post_json TEXT,
             captured_at INTEGER,
             received_at TEXT NOT NULL,
             han_label INTEGER,

@@ -52,7 +52,7 @@ async function processUnlabeledPosts() {
         const imageUrl = extractImageContextUrl(post);
 
         try {
-            const firstPass = await classifyHanAndPolitical(post.text || "", imageUrl);
+            const firstPass = await classifyHanAndPolitical(post.text || "", imageUrl, post.quotedPost || null);
 
             await postService.saveHanAndPoliticalLabels(
                 post.id,
@@ -106,7 +106,7 @@ async function processUnlabeledPosts() {
 
 async function processPoliticalSublabelsForPost(post, imageUrl) {
     try {
-        const sublabels = await classifyPoliticalSublabels(post.text || "", imageUrl);
+        const sublabels = await classifyPoliticalSublabels(post.text || "", imageUrl, post.quotedPost || null);
         await postService.savePoliticalSublabels(
             post.id,
             sublabels.labels,

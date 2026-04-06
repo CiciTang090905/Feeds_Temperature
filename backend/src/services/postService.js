@@ -10,6 +10,7 @@ const SELECT_COLUMNS_SQL = [
     "posted_at",
     "text",
     "media_json",
+    "quoted_post_json",
     "captured_at",
     "received_at",
     "han_label",
@@ -60,9 +61,10 @@ async function ingestPosts(posts) {
                         posted_at,
                         text,
                         media_json,
+                        quoted_post_json,
                         captured_at,
                         received_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
                 [
                     post.platform,
@@ -71,6 +73,7 @@ async function ingestPosts(posts) {
                     post.postedAt || null,
                     post.text,
                     JSON.stringify(post.media || null),
+                    JSON.stringify(post.quotedPost || null),
                     post.capturedAt || null,
                     receivedAt,
                 ]
@@ -343,6 +346,7 @@ function mapRowToPost(row) {
         postedAt: row.posted_at,
         text: row.text,
         media: row.media_json ? JSON.parse(row.media_json) : null,
+        quotedPost: row.quoted_post_json ? JSON.parse(row.quoted_post_json) : null,
         capturedAt: row.captured_at,
         receivedAt: row.received_at,
         hanLabel: row.han_label,

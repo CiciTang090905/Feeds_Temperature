@@ -22,12 +22,28 @@ function isOnX() {
     return /(^|\.)x\.com$/.test(location.hostname) || /(^|\.)twitter\.com$/.test(location.hostname);
 }
 
+function extractTweetIdFromStatusUrl(url) {
+    const match = String(url || "").match(tweetIdRegex);
+    return match ? match[1] : null;
+}
+
 function extractTweetIdFromArticle(articleDOM) {
-    const links = articleDOM.querySelectorAll("a[href*='status']");
+    const links = articleDOM.querySelectorAll("a[href*='/status/']");
+
+    // Prefer the permalink/time link for the top-level post to avoid picking quoted tweet IDs.
     for (let i = 0; i < links.length; i++) {
-        const match = links[i].href.match(tweetIdRegex);
-        if (match !== null) return match[1];
+        const link = links[i];
+        const hasTimestamp = Boolean(link.querySelector("time"));
+        if (!hasTimestamp) continue;
+        const tweetId = extractTweetIdFromStatusUrl(link.href);
+        if (tweetId) return tweetId;
     }
+
+    for (let i = 0; i < links.length; i++) {
+        const tweetId = extractTweetIdFromStatusUrl(links[i].href);
+        if (tweetId) return tweetId;
+    }
+
     return null;
 }
 
@@ -90,6 +106,34 @@ function getTweetMedia(tweetArticle) {
     });
 
     return media;
+}
+
+function extractQuotedPost(tweetArticle, primaryTweetId) {
+    const links = tweetArticle.querySelectorAll("a[href*='/status/']");
+
+    for (const link of links) {
+        const quotedTweetId = extractTweetIdFromStatusUrl(link.href);
+        if (!quotedTweetId || quotedTweetId === primaryTweetId) continue;
+
+        const quotedContainer = link.closest("div[role='link']");
+        if (!quotedContainer || !tweetArticle.contains(quotedContainer)) continue;
+
+        const quotedTextNode = quotedContainer.querySelector('div[data-testid="tweetText"]');
+        const quotedText = quotedTextNode ? quotedTextNode.innerText.trim() : "";
+        const quotedMedia = getTweetMedia(quotedContainer);
+        const hasQuotedMedia = quotedMedia.images.length > 0 || quotedMedia.videoThumbnails.length > 0;
+        if (!quotedText && !hasQuotedMedia) continue;
+
+        return {
+            tweetId: quotedTweetId,
+            url: link.href,
+            author: getTweetAuthor(quotedContainer),
+            text: quotedText,
+            media: quotedMedia,
+        };
+    }
+
+    return null;
 }
 
 function isInViewport(element) {
@@ -484,6 +528,7 @@ async function captureVisibleTweets() {
 
         const text = getTweetText(article);
         if (!text) return;
+        const quotedPost = extractQuotedPost(article, tweetId);
 
         capturedIds.add(tweetId);
         newPosts.push({
@@ -493,6 +538,7 @@ async function captureVisibleTweets() {
             postedAt: getTweetDate(article),
             text,
             media: getTweetMedia(article),
+            quotedPost,
             capturedAt: Date.now(),
             pageUrl: location.href,
         });
@@ -553,6 +599,8 @@ window.showStoredPosts = async function () {
         text: post.text.slice(0, 80) + (post.text.length > 80 ? "..." : ""),
         images: (post.media?.images || []).join("\n"),
         videoThumbnails: (post.media?.videoThumbnails || []).join("\n"),
+        quotedPostUrl: post.quotedPost?.url || "",
+        quotedPostText: post.quotedPost?.text ? `${post.quotedPost.text.slice(0, 60)}${post.quotedPost.text.length > 60 ? "..." : ""}` : "",
         capturedAt: new Date(post.capturedAt).toLocaleString(),
     })));
     return posts;

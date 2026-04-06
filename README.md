@@ -85,6 +85,7 @@ Run from `backend/`:
 - `postedAt`
 - `text`
 - `media`
+- `quotedPost` (optional quoted-post context: `url`, `tweetId`, `author`, `text`, `media`)
 - `capturedAt`
 - `pageUrl`
 

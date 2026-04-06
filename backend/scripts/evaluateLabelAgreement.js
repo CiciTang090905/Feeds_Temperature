@@ -31,14 +31,14 @@ async function main() {
     for (const post of sampledPosts) {
         const imageUrl = extractImageContextUrl(post.media);
 
-        const firstPass = await classifyHanAndPolitical(post.text || "", imageUrl);
+        const firstPass = await classifyHanAndPolitical(post.text || "", imageUrl, post.quotedPost || null);
         trackImageUsage(tracker.imageUsage.firstPass, imageUrl, firstPass.imageUsed);
 
         compareLabel(tracker, mismatches, post.id, "han_label", post.han_label, firstPass.labels.han_label);
         compareLabel(tracker, mismatches, post.id, "is_political", post.is_political, firstPass.labels.is_political);
 
         if (post.is_political === 1) {
-            const sublabelResult = await classifyPoliticalSublabels(post.text || "", imageUrl);
+            const sublabelResult = await classifyPoliticalSublabels(post.text || "", imageUrl, post.quotedPost || null);
             trackImageUsage(tracker.imageUsage.politicalSublabels, imageUrl, sublabelResult.imageUsed);
 
             for (const label of EXTRA_LABELS) {
@@ -63,6 +63,7 @@ async function getSampledPosts(limit) {
                 id,
                 text,
                 media_json,
+                quoted_post_json,
                 han_label,
                 is_political,
                 ${selectSublabels}
@@ -80,6 +81,7 @@ function mapRow(row) {
     return {
         ...row,
         media: row.media_json ? safeJsonParse(row.media_json) : null,
+        quotedPost: row.quoted_post_json ? safeJsonParse(row.quoted_post_json) : null,
     };
 }
 

@@ -8,8 +8,8 @@ const {
     STRICT_CLASSIFIER_DEVELOPER_MESSAGE,
 } = require("../config/labelPrompts");
 
-async function classifyHanAndPolitical(postText, imageUrl = null) {
-    const prompt = FIRST_PASS_PROMPT_TEMPLATE.replace("{POST}", postText || "");
+async function classifyHanAndPolitical(postText, imageUrl = null, quotedPost = null) {
+    const prompt = FIRST_PASS_PROMPT_TEMPLATE.replace("{POST}", buildPostPromptContext(postText, quotedPost));
 
     const data = await runChatCompletion([
         {
@@ -37,7 +37,7 @@ async function classifyHanAndPolitical(postText, imageUrl = null) {
     };
 }
 
-async function classifyPoliticalSublabels(postText, imageUrl = null) {
+async function classifyPoliticalSublabels(postText, imageUrl = null, quotedPost = null) {
     const labelDefinitions = EXTRA_LABELS.map((label) => {
         const extra = label.extraGuidance ? ` Guidance: ${label.extraGuidance}` : "";
         return `- ${label.key}: ${label.definition}.${extra}`;
@@ -45,7 +45,7 @@ async function classifyPoliticalSublabels(postText, imageUrl = null) {
 
     const prompt = POLITICAL_SUBLABELS_PROMPT_TEMPLATE
         .replace("{LABEL_DEFINITIONS}", labelDefinitions)
-        .replace("{POST}", postText || "");
+        .replace("{POST}", buildPostPromptContext(postText, quotedPost));
 
     const data = await runChatCompletion([
         {
@@ -131,6 +131,42 @@ function normalizeImageUsedValue(value, imageUrl) {
 
 function buildPrompt(postText) {
     return LEGACY_HAN_PROMPT_TEMPLATE.replace("{POST}", postText);
+}
+
+function buildPostPromptContext(postText, quotedPost) {
+    const primaryText = String(postText || "").trim();
+    const lines = [
+        "[PRIMARY_POST_TEXT]",
+        primaryText || "(empty)",
+        "[/PRIMARY_POST_TEXT]",
+    ];
+
+    if (quotedPost && typeof quotedPost === "object") {
+        const quotedText = String(quotedPost.text || "").trim();
+        const quotedUrl = String(quotedPost.url || "").trim();
+        const quotedTweetId = String(quotedPost.tweetId || "").trim();
+        const quotedImages = Array.isArray(quotedPost?.media?.images) ? quotedPost.media.images.filter(Boolean) : [];
+        const hasQuotedContext = Boolean(quotedText || quotedUrl || quotedTweetId || quotedImages.length > 0);
+
+        if (hasQuotedContext) {
+            lines.push("[QUOTED_POST_CONTEXT]");
+            if (quotedUrl) lines.push(`url: ${quotedUrl}`);
+            if (quotedTweetId) lines.push(`tweet_id: ${quotedTweetId}`);
+            lines.push("[QUOTED_POST_TEXT]");
+            lines.push(quotedText || "(none)");
+            lines.push("[/QUOTED_POST_TEXT]");
+            lines.push("[QUOTED_POST_IMAGES]");
+            lines.push(quotedImages.length > 0 ? quotedImages.join("\n") : "(none)");
+            lines.push("[/QUOTED_POST_IMAGES]");
+            lines.push("[/QUOTED_POST_CONTEXT]");
+            return lines.join("\n");
+        }
+    }
+
+    lines.push("[QUOTED_POST_CONTEXT]");
+    lines.push("(none)");
+    lines.push("[/QUOTED_POST_CONTEXT]");
+    return lines.join("\n");
 }
 
 async function classifyPostText(postText) {
