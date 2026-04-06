@@ -7,6 +7,7 @@ const FIRST_PASS_PROMPT_TEMPLATE = `Classify the following social media post.
 Return a JSON object with exactly these fields:
 - highly_aroused_negativity: 0 or 1
 - is_political: 0 or 1
+- image_used: true or false
 - confidence: {
   "highly_aroused_negativity": number between 0 and 1,
   "is_political": number between 0 and 1
@@ -80,6 +81,7 @@ Return a JSON object with exactly these fields:
 - social_distrust: 0 or 1
 - social_distance: 0 or 1
 - biased_evaluation_politicized_facts: 0 or 1
+- image_used: true or false
 - confidence: {
   "partisan_animosity": number between 0 and 1,
   "support_undemocratic_practices": number between 0 and 1,

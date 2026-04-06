@@ -9,7 +9,8 @@
     "label:one": "node scripts/labelOnePost.js",
     "label:all": "node scripts/labelUnlabeledPosts.js",
     "label:watch": "node scripts/labelUnlabeledPosts.js --watch",
-    "labels:show": "node scripts/showLatestLabels.js"
+    "labels:show": "node scripts/showLatestLabels.js",
+    "label:eval15": "node scripts/evaluateLabelAgreement.js 15"
   },
   "dependencies": {
     "cors": "^2.8.5",

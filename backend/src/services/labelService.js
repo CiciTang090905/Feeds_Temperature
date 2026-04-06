@@ -27,6 +27,7 @@ async function classifyHanAndPolitical(postText, imageUrl = null) {
             han_label: normalizeBinaryValue(parsed.highly_aroused_negativity),
             is_political: normalizeBinaryValue(parsed.is_political),
         },
+        imageUsed: normalizeImageUsedValue(parsed.image_used, imageUrl),
         confidence: {
             highly_aroused_negativity: normalizeConfidenceValue(parsed?.confidence?.highly_aroused_negativity),
             is_political: normalizeConfidenceValue(parsed?.confidence?.is_political),
@@ -67,6 +68,7 @@ async function classifyPoliticalSublabels(postText, imageUrl = null) {
 
     return {
         labels,
+        imageUsed: normalizeImageUsedValue(parsed.image_used, imageUrl),
         confidence,
         model: data.model || getAzureConfig().deployment,
         rawOutput: output,
@@ -116,6 +118,15 @@ function normalizeConfidenceValue(value) {
     if (numeric > 1) return 1;
 
     return Number(numeric.toFixed(4));
+}
+
+function normalizeImageUsedValue(value, imageUrl) {
+    if (!imageUrl) return false;
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value === 1 || value === "1") return true;
+    if (value === 0 || value === "0") return false;
+    return false;
 }
 
 function buildPrompt(postText) {

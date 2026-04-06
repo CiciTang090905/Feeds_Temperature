@@ -63,6 +63,7 @@ async function processUnlabeledPosts() {
                 {
                     highly_aroused_negativity: firstPass.confidence.highly_aroused_negativity,
                     is_political: firstPass.confidence.is_political,
+                    image_used_first_pass: firstPass.imageUsed,
                 }
             );
 
@@ -86,6 +87,7 @@ async function processUnlabeledPosts() {
                     {
                         highly_aroused_negativity: null,
                         is_political: null,
+                        image_used_first_pass: false,
                     }
                 );
                 console.warn(
@@ -105,7 +107,14 @@ async function processUnlabeledPosts() {
 async function processPoliticalSublabelsForPost(post, imageUrl) {
     try {
         const sublabels = await classifyPoliticalSublabels(post.text || "", imageUrl);
-        await postService.savePoliticalSublabels(post.id, sublabels.labels, sublabels.confidence);
+        await postService.savePoliticalSublabels(
+            post.id,
+            sublabels.labels,
+            {
+                ...sublabels.confidence,
+                image_used_political_sublabels: sublabels.imageUsed,
+            }
+        );
 
         console.log(
             `processing: ${post.platform}:${post.tweetId} | db_id:${post.id} --> political_sublabels_saved`
@@ -133,6 +142,7 @@ async function processPoliticalSublabelsForPost(post, imageUrl) {
                     social_distrust: null,
                     social_distance: null,
                     biased_evaluation_politicized_facts: null,
+                    image_used_political_sublabels: false,
                 }
             );
             console.warn(

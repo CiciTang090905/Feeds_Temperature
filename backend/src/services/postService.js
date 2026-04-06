@@ -18,8 +18,7 @@ const SELECT_COLUMNS_SQL = [
     ...EXTRA_LABEL_COLUMNS,
 ].join(",\n            ");
 
-const STATS_METRIC_DEFINITIONS = [
-    { responseKey: "highlyNegativeArousal", sourceColumn: "han_label", sqlAlias: "highly_negative_arousal" },
+const POLITICAL_POST_METRIC_DEFINITIONS = [
     { responseKey: "partisanAnimosity", sourceColumn: "partisan_animosity", sqlAlias: "partisan_animosity" },
     { responseKey: "supportUndemocraticPractices", sourceColumn: "support_undemocratic_practices", sqlAlias: "support_undemocratic_practices" },
     { responseKey: "supportPartisanViolence", sourceColumn: "support_partisan_violence", sqlAlias: "support_partisan_violence" },
@@ -32,8 +31,10 @@ const STATS_METRIC_DEFINITIONS = [
 
 const STATS_SELECT_SQL = [
     "COUNT(*) AS total_posts",
-    ...STATS_METRIC_DEFINITIONS.map(
-        (metric) => `COALESCE(SUM(CASE WHEN ${metric.sourceColumn} = 1 THEN 1 ELSE 0 END), 0) AS ${metric.sqlAlias}`
+    "COALESCE(SUM(CASE WHEN han_label = 1 THEN 1 ELSE 0 END), 0) AS highly_negative_arousal",
+    "COALESCE(SUM(CASE WHEN is_political = 1 THEN 1 ELSE 0 END), 0) AS political_posts",
+    ...POLITICAL_POST_METRIC_DEFINITIONS.map(
+        (metric) => `COALESCE(SUM(CASE WHEN is_political = 1 AND ${metric.sourceColumn} = 1 THEN 1 ELSE 0 END), 0) AS ${metric.sqlAlias}`
     ),
 ].join(",\n                ");
 
@@ -108,10 +109,10 @@ async function getAllPosts() {
 
 async function getPostStats() {
     const dayAgoMs = Date.now() - DAY_MS;
-    const fullyLabeledWhereClause = buildFullyLabeledWhereClause();
+    const labeledWhereClause = buildLabeledWhereClause();
     const [allTime, last24Hours] = await Promise.all([
-        getAggregatedPostStats(fullyLabeledWhereClause),
-        getAggregatedPostStats(buildWhereClause(fullyLabeledWhereClause, "captured_at IS NOT NULL", "captured_at >= ?"), [dayAgoMs]),
+        getAggregatedPostStats(labeledWhereClause),
+        getAggregatedPostStats(buildWhereClause(labeledWhereClause, "captured_at IS NOT NULL", "captured_at >= ?"), [dayAgoMs]),
     ]);
 
     return {
@@ -120,8 +121,8 @@ async function getPostStats() {
     };
 }
 
-function buildFullyLabeledWhereClause() {
-    const requiredColumns = ["han_label", ...EXTRA_LABEL_COLUMNS];
+function buildLabeledWhereClause() {
+    const requiredColumns = ["han_label", "is_political"];
     return requiredColumns.map((column) => `${column} IS NOT NULL`).join(" AND ");
 }
 
@@ -144,20 +145,34 @@ async function getAggregatedPostStats(whereClause = "", params = []) {
 
 function buildStatsFromRow(row) {
     const total = Number(row.total_posts) || 0;
-    const metrics = {};
+    const highlyNegativeArousalCount = Number(row.highly_negative_arousal) || 0;
+    const politicalCount = Number(row.political_posts) || 0;
+    const politicalMetrics = {};
 
-    // Keep metric mapping in one place so SQL aliases and response keys stay aligned.
-    for (const metric of STATS_METRIC_DEFINITIONS) {
+    for (const metric of POLITICAL_POST_METRIC_DEFINITIONS) {
         const count = Number(row[metric.sqlAlias]) || 0;
-        metrics[metric.responseKey] = {
+        politicalMetrics[metric.responseKey] = {
             count,
-            percent: total > 0 ? Math.round((count / total) * 100) : 0,
+            percent: politicalCount > 0 ? Math.round((count / politicalCount) * 100) : 0,
         };
     }
 
     return {
         totalPostsWatched: total,
-        metrics,
+        allPosts: {
+            highlyNegativeArousal: {
+                count: highlyNegativeArousalCount,
+                percent: total > 0 ? Math.round((highlyNegativeArousalCount / total) * 100) : 0,
+            },
+            political: {
+                count: politicalCount,
+                percent: total > 0 ? Math.round((politicalCount / total) * 100) : 0,
+            },
+        },
+        politicalPosts: {
+            totalPosts: politicalCount,
+            metrics: politicalMetrics,
+        },
     };
 }
 
@@ -168,6 +183,7 @@ async function getUnlabeledPosts(limit = 25) {
                 ${SELECT_COLUMNS_SQL}
             FROM posts
             WHERE han_label IS NULL
+               OR is_political IS NULL
             ORDER BY id ASC
             LIMIT ?
         `,
