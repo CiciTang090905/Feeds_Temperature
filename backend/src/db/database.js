@@ -57,12 +57,20 @@ async function migratePostsTable() {
     const hasLabel = await hasColumn("posts", "han_label");
     const hasIsPolitical = await hasColumn("posts", "is_political");
     const hasLabelConfidenceJson = await hasColumn("posts", "label_confidence_json");
+    const hasQuotedPost = await hasColumn("posts", "quoted_post");
     const hasQuotedPostJson = await hasColumn("posts", "quoted_post_json");
     const hasLabelModel = await hasColumn("posts", "label_model");
     const hasLabelError = await hasColumn("posts", "label_error");
     const extraLabelColumnsSql = EXTRA_LABEL_COLUMNS.map((column) => `${column} INTEGER`).join(",\n                ");
+    const quotedPostSelectExpression = hasQuotedPost && hasQuotedPostJson
+        ? "COALESCE(quoted_post, quoted_post_json)"
+        : hasQuotedPost
+            ? "quoted_post"
+            : hasQuotedPostJson
+                ? "quoted_post_json"
+                : "NULL";
 
-    if (hasPageUrl || hasLabelModel || hasLabelError) {
+    if (hasPageUrl || hasLabelModel || hasLabelError || hasQuotedPostJson) {
         await run("ALTER TABLE posts RENAME TO posts_old");
         await run(`
             CREATE TABLE posts (
@@ -73,7 +81,7 @@ async function migratePostsTable() {
                 posted_at TEXT,
                 text TEXT NOT NULL,
                 media_json TEXT,
-                quoted_post_json TEXT,
+                quoted_post TEXT,
                 captured_at INTEGER,
                 received_at TEXT NOT NULL,
                 han_label INTEGER,
@@ -92,7 +100,7 @@ async function migratePostsTable() {
                 posted_at,
                 text,
                 media_json,
-                quoted_post_json,
+                quoted_post,
                 captured_at,
                 received_at,
                 han_label,
@@ -107,7 +115,7 @@ async function migratePostsTable() {
                 posted_at,
                 text,
                 media_json,
-                NULL AS quoted_post_json,
+                ${quotedPostSelectExpression} AS quoted_post,
                 captured_at,
                 received_at,
                 han_label,
@@ -129,16 +137,16 @@ async function migratePostsTable() {
         }
     }
 
-    if (!hasIsPolitical) {
+    if (!(await hasColumn("posts", "is_political"))) {
         await run("ALTER TABLE posts ADD COLUMN is_political INTEGER");
     }
 
-    if (!hasLabelConfidenceJson) {
+    if (!(await hasColumn("posts", "label_confidence_json"))) {
         await run("ALTER TABLE posts ADD COLUMN label_confidence_json TEXT");
     }
 
-    if (!hasQuotedPostJson) {
-        await run("ALTER TABLE posts ADD COLUMN quoted_post_json TEXT");
+    if (!(await hasColumn("posts", "quoted_post"))) {
+        await run("ALTER TABLE posts ADD COLUMN quoted_post TEXT");
     }
 }
 
@@ -154,7 +162,7 @@ async function initializeDatabase() {
             posted_at TEXT,
             text TEXT NOT NULL,
             media_json TEXT,
-            quoted_post_json TEXT,
+            quoted_post TEXT,
             captured_at INTEGER,
             received_at TEXT NOT NULL,
             han_label INTEGER,

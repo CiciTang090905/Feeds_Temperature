@@ -63,7 +63,7 @@ async function getSampledPosts(limit) {
                 id,
                 text,
                 media_json,
-                quoted_post_json,
+                quoted_post,
                 han_label,
                 is_political,
                 ${selectSublabels}
@@ -81,7 +81,7 @@ function mapRow(row) {
     return {
         ...row,
         media: row.media_json ? safeJsonParse(row.media_json) : null,
-        quotedPost: row.quoted_post_json ? safeJsonParse(row.quoted_post_json) : null,
+        quotedPost: row.quoted_post ? safeJsonParse(row.quoted_post) : null,
     };
 }
 

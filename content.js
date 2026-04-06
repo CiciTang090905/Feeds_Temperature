@@ -79,11 +79,16 @@ function getTweetDate(tweetArticle) {
     return timeEl ? timeEl.getAttribute("datetime") : "";
 }
 
-function getTweetMedia(tweetArticle) {
+function getTweetMedia(tweetArticle, options = {}) {
+    const { excludeNestedRoleLinkMedia = false } = options;
     const media = { images: [], videoThumbnails: [] };
 
     const videos = tweetArticle.querySelectorAll("video");
     videos.forEach((video) => {
+        if (excludeNestedRoleLinkMedia) {
+            const roleLinkContainer = video.closest("div[role='link']");
+            if (roleLinkContainer && roleLinkContainer !== tweetArticle && tweetArticle.contains(roleLinkContainer)) return;
+        }
         if (video.poster && !media.videoThumbnails.includes(video.poster)) {
             media.videoThumbnails.push(video.poster);
         }
@@ -92,6 +97,10 @@ function getTweetMedia(tweetArticle) {
     const excludePatterns = ["profile_images", "emoji", "hashflag"];
     const imgs = tweetArticle.querySelectorAll("img[src]");
     imgs.forEach((img) => {
+        if (excludeNestedRoleLinkMedia) {
+            const roleLinkContainer = img.closest("div[role='link']");
+            if (roleLinkContainer && roleLinkContainer !== tweetArticle && tweetArticle.contains(roleLinkContainer)) return;
+        }
         const src = img.src;
         if (!src || media.images.includes(src) || media.videoThumbnails.includes(src)) return;
         if (excludePatterns.some((pattern) => src.includes(pattern))) return;
@@ -109,24 +118,56 @@ function getTweetMedia(tweetArticle) {
 }
 
 function extractQuotedPost(tweetArticle, primaryTweetId) {
-    const links = tweetArticle.querySelectorAll("a[href*='/status/']");
+    const roleLinkBlocks = Array.from(tweetArticle.querySelectorAll("div[role='link'][tabindex='0']"));
+    for (const block of roleLinkBlocks) {
+        const quotedTextNode = block.querySelector('div[data-testid="tweetText"]');
+        if (!quotedTextNode) continue;
 
-    for (const link of links) {
-        const quotedTweetId = extractTweetIdFromStatusUrl(link.href);
-        if (!quotedTweetId || quotedTweetId === primaryTweetId) continue;
+        const quotedText = quotedTextNode.innerText.trim();
+        const statusLink = block.querySelector("a[href*='/status/']");
+        const xLink = block.querySelector("a[href*='x.com/'], a[href*='twitter.com/']");
+        const linkHref = (statusLink && statusLink.href) || (xLink && xLink.href) || "";
+        const quotedTweetId = extractTweetIdFromStatusUrl(linkHref);
+        if (quotedTweetId && quotedTweetId === primaryTweetId) continue;
 
-        const quotedContainer = link.closest("div[role='link']");
+        const quotedMedia = getTweetMedia(block);
+        const hasQuotedMedia = quotedMedia.images.length > 0 || quotedMedia.videoThumbnails.length > 0;
+        if (!quotedText && !hasQuotedMedia) continue;
+
+        return {
+            tweetId: quotedTweetId || null,
+            url: linkHref || null,
+            author: getTweetAuthor(block),
+            text: quotedText,
+            media: quotedMedia,
+        };
+    }
+
+    // Fallback for layouts where quoted cards are not represented by role=link blocks.
+    const textNodes = Array.from(tweetArticle.querySelectorAll('div[data-testid="tweetText"]'));
+    if (textNodes.length <= 1) return null;
+
+    // The first tweetText is the top-level post text. Any additional tweetText is usually quoted context.
+    for (let i = 1; i < textNodes.length; i++) {
+        const quotedTextNode = textNodes[i];
+        const quotedText = quotedTextNode ? quotedTextNode.innerText.trim() : "";
+        const quotedContainer = quotedTextNode.closest("div[role='link']") || quotedTextNode.parentElement;
         if (!quotedContainer || !tweetArticle.contains(quotedContainer)) continue;
 
-        const quotedTextNode = quotedContainer.querySelector('div[data-testid="tweetText"]');
-        const quotedText = quotedTextNode ? quotedTextNode.innerText.trim() : "";
+        const statusLink = quotedContainer.querySelector("a[href*='/status/']");
+        const xLink = quotedContainer.querySelector("a[href*='x.com/'], a[href*='twitter.com/']");
+        const linkHref = (statusLink && statusLink.href) || (xLink && xLink.href) || "";
+        const quotedTweetId = extractTweetIdFromStatusUrl(linkHref);
+
+        if (quotedTweetId && quotedTweetId === primaryTweetId) continue;
+
         const quotedMedia = getTweetMedia(quotedContainer);
         const hasQuotedMedia = quotedMedia.images.length > 0 || quotedMedia.videoThumbnails.length > 0;
         if (!quotedText && !hasQuotedMedia) continue;
 
         return {
-            tweetId: quotedTweetId,
-            url: link.href,
+            tweetId: quotedTweetId || null,
+            url: linkHref || null,
             author: getTweetAuthor(quotedContainer),
             text: quotedText,
             media: quotedMedia,
@@ -537,7 +578,7 @@ async function captureVisibleTweets() {
             author: getTweetAuthor(article),
             postedAt: getTweetDate(article),
             text,
-            media: getTweetMedia(article),
+            media: getTweetMedia(article, { excludeNestedRoleLinkMedia: true }),
             quotedPost,
             capturedAt: Date.now(),
             pageUrl: location.href,
