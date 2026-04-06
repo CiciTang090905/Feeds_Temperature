@@ -1,2 +1,6 @@
 local-repos/
 node_modules/
+
+# macOS / local tool metadata
+.DS_Store
+.codex

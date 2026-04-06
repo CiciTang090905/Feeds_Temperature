@@ -10,19 +10,26 @@ Chrome extension + local backend for collecting visible X/Twitter posts, uploadi
 - Retries upload every 5 seconds if backend is unavailable.
 - Stores posts in SQLite (`backend/data/feeds-temperature.db`) with dedupe on `platform + tweet_id`.
 - Runs an auto-label worker:
-  - HAN label (`han_label`: high-arousal negative emotion)
-  - extra political/social labels (partisan animosity, social distrust, etc.)
+  - first pass per post: HAN + `is_political`
+  - second pass only when political: 8 political/social labels (partisan animosity, social distrust, etc.)
+  - multimodal support: image/video-thumbnail URL is sent when available (text-first evidence policy)
 - Shows an in-page stats panel on X:
   - draggable
   - minimize/expand toggle
   - refreshes every 10 seconds from backend stats API
+  - sections for both `All Time` and `Last 24 Hours`:
+    - Posts watched
+    - % of all posts (HAN, Political)
+    - % of political posts (8 sublabels)
 
 ## Data flow (captured -> uploaded -> labeled)
 
 1. Content script captures visible posts and writes them to local extension storage.
 2. Background script syncs `captured_posts` to backend via `POST /api/posts/batch`.
 3. Backend saves rows in SQLite.
-4. Label worker polls unlabeled rows and writes HAN + extra label columns.
+4. Label worker polls unlabeled rows and labels per post:
+   - pass A: HAN + is_political
+   - pass B (conditional): 8 political sublabels when `is_political = 1`
 5. Content script fetches `GET /api/posts/stats` and renders percentages in the panel.
 
 ## API endpoints used
@@ -68,6 +75,7 @@ Run from `backend/`:
 - `npm run label:all` -> one-shot labeling pass
 - `npm run label:watch` -> continuous labeling loop
 - `npm run labels:show` -> print latest labels
+- `npm run label:eval15` -> sample 15 labeled posts, re-label, and print agreement report
 
 ## Captured post fields
 
@@ -99,3 +107,9 @@ Run from `backend/`:
 - Pending local posts do not drain
   - confirm backend is healthy
   - reload extension after extension code changes
+
+## Evaluation report output
+
+- `npm run label:eval15` also writes the latest report to:
+  - `backend/tmp/label-eval-latest.txt`
+- `backend/tmp/` is git-ignored.

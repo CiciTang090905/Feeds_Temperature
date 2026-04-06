@@ -255,8 +255,12 @@ function wireStatsPanelInteractions(panel, header, body, toggleButton) {
     });
 }
 
-const METRIC_ROWS = [
+const ALL_POST_ROWS = [
     { key: "highlyNegativeArousal", label: "Highly negative arousal" },
+    { key: "political", label: "Political" },
+];
+
+const POLITICAL_METRIC_ROWS = [
     { key: "partisanAnimosity", label: "Partisan animosity" },
     { key: "supportUndemocraticPractices", label: "Support for undemocratic practices" },
     { key: "supportPartisanViolence", label: "Support for partisan violence" },
@@ -293,6 +297,19 @@ function createStatRow(label, value, isStrong = false) {
     return row;
 }
 
+function createSectionCaption(text) {
+    const caption = createElement("div", {
+        marginTop: "8px",
+        marginBottom: "2px",
+        opacity: "0.8",
+        fontSize: "12px",
+        fontWeight: "700",
+        letterSpacing: "0.02em",
+    });
+    caption.textContent = text;
+    return caption;
+}
+
 function createStatsSection(title, sectionStats) {
     const card = createElement("section", {
         border: "1px solid rgba(255, 255, 255, 0.12)",
@@ -314,7 +331,7 @@ function createStatsSection(title, sectionStats) {
         rowGap: "6px",
     });
 
-    if (!sectionStats || !sectionStats.metrics) {
+    if (!sectionStats || !sectionStats.allPosts || !sectionStats.politicalPosts) {
         const empty = createElement("div", {
             opacity: "0.72",
             fontSize: "12px",
@@ -326,8 +343,16 @@ function createStatsSection(title, sectionStats) {
     }
 
     rows.appendChild(createStatRow("Posts watched", String(Number(sectionStats.totalPostsWatched) || 0), true));
-    for (const metric of METRIC_ROWS) {
-        const percent = Number(sectionStats.metrics?.[metric.key]?.percent) || 0;
+
+    rows.appendChild(createSectionCaption("% of all posts"));
+    for (const metric of ALL_POST_ROWS) {
+        const percent = Number(sectionStats.allPosts?.[metric.key]?.percent) || 0;
+        rows.appendChild(createStatRow(metric.label, `${percent}%`));
+    }
+
+    rows.appendChild(createSectionCaption("% of political posts"));
+    for (const metric of POLITICAL_METRIC_ROWS) {
+        const percent = Number(sectionStats.politicalPosts?.metrics?.[metric.key]?.percent) || 0;
         rows.appendChild(createStatRow(metric.label, `${percent}%`));
     }
 
