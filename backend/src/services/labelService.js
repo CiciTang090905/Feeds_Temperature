@@ -1,43 +1,125 @@
-const PROMPT_TEMPLATE = `Classify the following social media post.
+const { EXTRA_LABELS } = require("../config/labelCatalog");
+const {
+    BATCH_PROMPT_TEMPLATE,
+    FIRST_PASS_PROMPT_TEMPLATE,
+    IMAGE_SUPPORT_INSTRUCTION,
+    LEGACY_HAN_PROMPT_TEMPLATE,
+    POLITICAL_SUBLABELS_PROMPT_TEMPLATE,
+    STRICT_CLASSIFIER_DEVELOPER_MESSAGE,
+} = require("../config/labelPrompts");
 
-Label whether the author expresses high-arousal negative emotion (e.g., anger, outrage, hostility, aggressive frustration, contempt).
+async function classifyHanAndPolitical(postText, imageUrl = null) {
+    const prompt = FIRST_PASS_PROMPT_TEMPLATE.replace("{POST}", postText || "");
 
-High-arousal negative emotion = activated, intense negativity directed at someone or something.
-Examples: anger, rage, outrage, hostility, insults, aggressive blame.
+    const data = await runChatCompletion([
+        {
+            role: "developer",
+            content: STRICT_CLASSIFIER_DEVELOPER_MESSAGE,
+        },
+        buildUserMessage(prompt, imageUrl),
+    ], { maxCompletionTokens: 512 });
 
-Do not label:
-- sadness, disappointment, worry, or fatigue
-- neutral statements or factual reporting
-- positive emotions
+    const output = extractChatOutput(data);
+    const parsed = parseJsonObjectOutput(output);
 
-Focus on the emotional tone of the author, not the topic.
+    return {
+        labels: {
+            han_label: normalizeBinaryValue(parsed.highly_aroused_negativity),
+            is_political: normalizeBinaryValue(parsed.is_political),
+        },
+        confidence: {
+            highly_aroused_negativity: normalizeConfidenceValue(parsed?.confidence?.highly_aroused_negativity),
+            is_political: normalizeConfidenceValue(parsed?.confidence?.is_political),
+        },
+        model: data.model || getAzureConfig().deployment,
+        rawOutput: output,
+    };
+}
 
-Output rule
+async function classifyPoliticalSublabels(postText, imageUrl = null) {
+    const labelDefinitions = EXTRA_LABELS.map((label) => {
+        const extra = label.extraGuidance ? ` Guidance: ${label.extraGuidance}` : "";
+        return `- ${label.key}: ${label.definition}.${extra}`;
+    }).join("\n");
 
-Return only:
-1 if high-arousal negative emotion is expressed
-0 otherwise
-No explanation. Only output 0 or 1.
+    const prompt = POLITICAL_SUBLABELS_PROMPT_TEMPLATE
+        .replace("{LABEL_DEFINITIONS}", labelDefinitions)
+        .replace("{POST}", postText || "");
 
-Post
-{POST}`;
+    const data = await runChatCompletion([
+        {
+            role: "developer",
+            content: STRICT_CLASSIFIER_DEVELOPER_MESSAGE,
+        },
+        buildUserMessage(prompt, imageUrl),
+    ], { maxCompletionTokens: 900 });
 
-const BATCH_PROMPT_TEMPLATE = `Do the following messages express {{LABEL_NAME}}?
-{{LABEL_NAME}} is defined as "{{LABEL_DEFINITION}}".
-{{OPTIONAL_EXTRA_GUIDANCE}}
+    const output = extractChatOutput(data);
+    const parsed = parseJsonObjectOutput(output);
 
-FORMAT:
-The input messages are given as JSON lines in the format
-{"id": <message_id>, "message": <message>}.
+    const labels = {};
+    const confidence = {};
 
-The output must be a JSON array of objects in the format
-[{"id": <message_id>, "answer": <YES or NO>}, ... ].
+    for (const label of EXTRA_LABELS) {
+        labels[label.column] = normalizeBinaryValue(parsed[label.key]);
+        confidence[label.key] = normalizeConfidenceValue(parsed?.confidence?.[label.key]);
+    }
 
-INPUT MESSAGES:
-{{INPUT_MESSAGES}}`;
+    return {
+        labels,
+        confidence,
+        model: data.model || getAzureConfig().deployment,
+        rawOutput: output,
+    };
+}
+
+function buildUserMessage(prompt, imageUrl) {
+    if (!imageUrl) {
+        return {
+            role: "user",
+            content: prompt,
+        };
+    }
+
+    return {
+        role: "user",
+        content: [
+            {
+                type: "text",
+                text: `${prompt}\n\n${IMAGE_SUPPORT_INSTRUCTION}`,
+            },
+            {
+                type: "image_url",
+                image_url: {
+                    url: imageUrl,
+                },
+            },
+        ],
+    };
+}
+
+function normalizeBinaryValue(value) {
+    if (value === 0 || value === "0") return 0;
+    if (value === 1 || value === "1") return 1;
+
+    throw new Error(`Expected binary label 0/1, got: ${JSON.stringify(value)}`);
+}
+
+function normalizeConfidenceValue(value) {
+    const numeric = Number(value);
+
+    if (!Number.isFinite(numeric)) {
+        return null;
+    }
+
+    if (numeric < 0) return 0;
+    if (numeric > 1) return 1;
+
+    return Number(numeric.toFixed(4));
+}
 
 function buildPrompt(postText) {
-    return PROMPT_TEMPLATE.replace("{POST}", postText);
+    return LEGACY_HAN_PROMPT_TEMPLATE.replace("{POST}", postText);
 }
 
 async function classifyPostText(postText) {
@@ -156,6 +238,31 @@ function parseJsonArrayOutput(output) {
     const parsed = JSON.parse(match[0]);
     if (!Array.isArray(parsed)) {
         throw new Error(`Model output JSON is not an array: ${JSON.stringify(output)}`);
+    }
+
+    return parsed;
+}
+
+function parseJsonObjectOutput(output) {
+    const raw = String(output || "").trim();
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            return parsed;
+        }
+    } catch (error) {
+        // Fallback for wrapped outputs.
+    }
+
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) {
+        throw new Error(`No JSON object found in model output: ${JSON.stringify(output)}`);
+    }
+
+    const parsed = JSON.parse(match[0]);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`Model output JSON is not an object: ${JSON.stringify(output)}`);
     }
 
     return parsed;
@@ -281,6 +388,8 @@ function clean(value) {
 }
 
 module.exports = {
+    classifyHanAndPolitical,
+    classifyPoliticalSublabels,
     classifyPostText,
     classifyPostsForLabel,
 };

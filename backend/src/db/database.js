@@ -55,6 +55,8 @@ async function hasColumn(tableName, columnName) {
 async function migratePostsTable() {
     const hasPageUrl = await hasColumn("posts", "page_url");
     const hasLabel = await hasColumn("posts", "han_label");
+    const hasIsPolitical = await hasColumn("posts", "is_political");
+    const hasLabelConfidenceJson = await hasColumn("posts", "label_confidence_json");
     const hasLabelModel = await hasColumn("posts", "label_model");
     const hasLabelError = await hasColumn("posts", "label_error");
     const extraLabelColumnsSql = EXTRA_LABEL_COLUMNS.map((column) => `${column} INTEGER`).join(",\n                ");
@@ -73,6 +75,8 @@ async function migratePostsTable() {
                 captured_at INTEGER,
                 received_at TEXT NOT NULL,
                 han_label INTEGER,
+                is_political INTEGER,
+                label_confidence_json TEXT,
                 ${extraLabelColumnsSql},
                 UNIQUE(platform, tweet_id)
             )
@@ -88,7 +92,9 @@ async function migratePostsTable() {
                 media_json,
                 captured_at,
                 received_at,
-                han_label
+                han_label,
+                is_political,
+                label_confidence_json
             )
             SELECT
                 id,
@@ -100,22 +106,31 @@ async function migratePostsTable() {
                 media_json,
                 captured_at,
                 received_at,
-                han_label
+                han_label,
+                NULL AS is_political,
+                NULL AS label_confidence_json
             FROM posts_old
         `);
         await run("DROP TABLE posts_old");
-        return;
-    }
-
-    if (!hasLabel) {
-        await run("ALTER TABLE posts ADD COLUMN han_label INTEGER");
-    }
-
-    for (const column of EXTRA_LABEL_COLUMNS) {
-        const hasExtraLabelColumn = await hasColumn("posts", column);
-        if (!hasExtraLabelColumn) {
-            await run(`ALTER TABLE posts ADD COLUMN ${column} INTEGER`);
+    } else {
+        if (!hasLabel) {
+            await run("ALTER TABLE posts ADD COLUMN han_label INTEGER");
         }
+
+        for (const column of EXTRA_LABEL_COLUMNS) {
+            const hasExtraLabelColumn = await hasColumn("posts", column);
+            if (!hasExtraLabelColumn) {
+                await run(`ALTER TABLE posts ADD COLUMN ${column} INTEGER`);
+            }
+        }
+    }
+
+    if (!hasIsPolitical) {
+        await run("ALTER TABLE posts ADD COLUMN is_political INTEGER");
+    }
+
+    if (!hasLabelConfidenceJson) {
+        await run("ALTER TABLE posts ADD COLUMN label_confidence_json TEXT");
     }
 }
 
@@ -134,6 +149,8 @@ async function initializeDatabase() {
             captured_at INTEGER,
             received_at TEXT NOT NULL,
             han_label INTEGER,
+            is_political INTEGER,
+            label_confidence_json TEXT,
             ${extraLabelColumnsSql},
             UNIQUE(platform, tweet_id)
         )

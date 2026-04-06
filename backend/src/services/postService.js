@@ -13,6 +13,8 @@ const SELECT_COLUMNS_SQL = [
     "captured_at",
     "received_at",
     "han_label",
+    "is_political",
+    "label_confidence_json",
     ...EXTRA_LABEL_COLUMNS,
 ].join(",\n            ");
 
@@ -175,6 +177,32 @@ async function getUnlabeledPosts(limit = 25) {
     return rows.map(mapRowToPost);
 }
 
+async function getUnlabeledPostsForPoliticalSublabels(limit = 25) {
+    const rows = await db.all(
+        `
+            SELECT
+                ${SELECT_COLUMNS_SQL}
+            FROM posts
+            WHERE is_political = 1
+              AND (
+                  partisan_animosity IS NULL OR
+                  support_undemocratic_practices IS NULL OR
+                  support_partisan_violence IS NULL OR
+                  support_undemocratic_candidates IS NULL OR
+                  opposition_bipartisan_cooperation IS NULL OR
+                  social_distrust IS NULL OR
+                  social_distance IS NULL OR
+                  biased_evaluation_politicized_facts IS NULL
+              )
+            ORDER BY id ASC
+            LIMIT ?
+        `,
+        [limit]
+    );
+
+    return rows.map(mapRowToPost);
+}
+
 async function getUnlabeledPostsByLabelColumn(labelColumn, limit = 25) {
     assertValidExtraLabelColumn(labelColumn);
 
@@ -217,6 +245,74 @@ async function savePostLabelByColumn(id, labelColumn, label) {
     );
 }
 
+async function saveHanAndPoliticalLabels(id, labels = {}, confidence = {}) {
+    await db.run(
+        `
+            UPDATE posts
+            SET han_label = ?,
+                is_political = ?,
+                label_confidence_json = ?
+            WHERE id = ?
+        `,
+        [
+            labels.hanLabel,
+            labels.isPolitical,
+            JSON.stringify(confidence || {}),
+            id,
+        ]
+    );
+}
+
+async function savePoliticalSublabels(id, sublabels = {}, confidence = {}) {
+    const mergedConfidence = await mergeConfidenceByPostId(id, confidence);
+
+    await db.run(
+        `
+            UPDATE posts
+            SET partisan_animosity = ?,
+                support_undemocratic_practices = ?,
+                support_partisan_violence = ?,
+                support_undemocratic_candidates = ?,
+                opposition_bipartisan_cooperation = ?,
+                social_distrust = ?,
+                social_distance = ?,
+                biased_evaluation_politicized_facts = ?,
+                label_confidence_json = ?
+            WHERE id = ?
+        `,
+        [
+            sublabels.partisan_animosity,
+            sublabels.support_undemocratic_practices,
+            sublabels.support_partisan_violence,
+            sublabels.support_undemocratic_candidates,
+            sublabels.opposition_bipartisan_cooperation,
+            sublabels.social_distrust,
+            sublabels.social_distance,
+            sublabels.biased_evaluation_politicized_facts,
+            JSON.stringify(mergedConfidence),
+            id,
+        ]
+    );
+}
+
+async function mergeConfidenceByPostId(id, nextConfidence) {
+    const rows = await db.all(
+        `
+            SELECT label_confidence_json
+            FROM posts
+            WHERE id = ?
+            LIMIT 1
+        `,
+        [id]
+    );
+
+    const existing = rows?.[0]?.label_confidence_json ? JSON.parse(rows[0].label_confidence_json) : {};
+    return {
+        ...existing,
+        ...(nextConfidence || {}),
+    };
+}
+
 function mapRowToPost(row) {
     const extraLabels = EXTRA_LABELS.reduce((acc, label) => {
         acc[label.key] = row[label.column];
@@ -234,6 +330,8 @@ function mapRowToPost(row) {
         capturedAt: row.captured_at,
         receivedAt: row.received_at,
         hanLabel: row.han_label,
+        isPolitical: row.is_political,
+        labelConfidence: row.label_confidence_json ? JSON.parse(row.label_confidence_json) : null,
         extraLabels,
     };
 }
@@ -248,8 +346,11 @@ module.exports = {
     getAllPosts,
     getPostStats,
     getUnlabeledPosts,
+    getUnlabeledPostsForPoliticalSublabels,
     getUnlabeledPostsByLabelColumn,
     ingestPosts,
+    saveHanAndPoliticalLabels,
     savePostLabel,
     savePostLabelByColumn,
+    savePoliticalSublabels,
 };
