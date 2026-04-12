@@ -1,22 +1,29 @@
 const db = require("../db/database");
-const { EXTRA_LABELS, EXTRA_LABEL_COLUMNS } = require("../config/labelCatalog");
+const { EXTRA_LABELS, EXTRA_LABEL_COLUMNS } = require("../labeling/shared/catalog");
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SELECT_COLUMNS_SQL = [
     "id",
     "platform",
     "tweet_id",
-    "author_json",
+    "author",
     "posted_at",
     "text",
-    "media_json",
+    "media",
     "quoted_post",
     "captured_at",
     "received_at",
     "han_label",
     "is_political",
-    "label_confidence_json",
+    "label_confidence",
     "label_skip_reason",
+    "stage_a_status",
+    "stage_b_status",
+    "stage_a_batch_id",
+    "stage_b_batch_id",
+    "stage_a_last_error",
+    "stage_b_last_error",
     ...EXTRA_LABEL_COLUMNS,
 ].join(",\n            ");
 
@@ -55,17 +62,19 @@ async function ingestPosts(posts) {
         try {
             const result = await db.run(
                 `
-                    INSERT OR IGNORE INTO posts (
+                    INSERT INTO posts (
                         platform,
                         tweet_id,
-                        author_json,
+                        author,
                         posted_at,
                         text,
-                        media_json,
+                        media,
                         quoted_post,
                         captured_at,
                         received_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (platform, tweet_id) DO NOTHING
+                    RETURNING id
                 `,
                 [
                     post.platform,
@@ -116,7 +125,7 @@ async function getPostStats() {
     const labeledWhereClause = buildLabeledWhereClause();
     const [allTime, last24Hours] = await Promise.all([
         getAggregatedPostStats(labeledWhereClause),
-        getAggregatedPostStats(buildWhereClause(labeledWhereClause, "captured_at IS NOT NULL", "captured_at >= ?"), [dayAgoMs]),
+        getAggregatedPostStats(buildWhereClause(labeledWhereClause, "captured_at IS NOT NULL", "captured_at >= $1"), [dayAgoMs]),
     ]);
 
     return {
@@ -136,12 +145,15 @@ function buildWhereClause(...clauses) {
 
 async function getAggregatedPostStats(whereClause = "", params = []) {
     const whereSql = whereClause ? `WHERE ${whereClause}` : "";
-    const rows = await db.all(`
-        SELECT
-            ${STATS_SELECT_SQL}
-        FROM posts
-        ${whereSql}
-    `, params);
+    const rows = await db.all(
+        `
+            SELECT
+                ${STATS_SELECT_SQL}
+            FROM posts
+            ${whereSql}
+        `,
+        params
+    );
 
     const row = rows[0] || {};
     return buildStatsFromRow(row);
@@ -189,7 +201,7 @@ async function getUnlabeledPosts(limit = 25) {
             WHERE (han_label IS NULL OR is_political IS NULL)
               AND (label_skip_reason IS NULL OR TRIM(label_skip_reason) = '')
             ORDER BY id ASC
-            LIMIT ?
+            LIMIT $1
         `,
         [limit]
     );
@@ -215,7 +227,7 @@ async function getUnlabeledPostsForPoliticalSublabels(limit = 25) {
                   biased_evaluation_politicized_facts IS NULL
               )
             ORDER BY id ASC
-            LIMIT ?
+            LIMIT $1
         `,
         [limit]
     );
@@ -234,7 +246,7 @@ async function getUnlabeledPostsByLabelColumn(labelColumn, limit = 25) {
             WHERE ${labelColumn} IS NULL
               AND (label_skip_reason IS NULL OR TRIM(label_skip_reason) = '')
             ORDER BY id ASC
-            LIMIT ?
+            LIMIT $1
         `,
         [limit]
     );
@@ -246,8 +258,8 @@ async function savePostLabel(id, label) {
     await db.run(
         `
             UPDATE posts
-            SET han_label = ?
-            WHERE id = ?
+            SET han_label = $1
+            WHERE id = $2
         `,
         [label, id]
     );
@@ -259,8 +271,8 @@ async function savePostLabelByColumn(id, labelColumn, label) {
     await db.run(
         `
             UPDATE posts
-            SET ${labelColumn} = ?
-            WHERE id = ?
+            SET ${labelColumn} = $1
+            WHERE id = $2
         `,
         [label, id]
     );
@@ -270,11 +282,21 @@ async function saveHanAndPoliticalLabels(id, labels = {}, confidence = {}) {
     await db.run(
         `
             UPDATE posts
-            SET han_label = ?,
-                is_political = ?,
-                label_confidence_json = ?,
-                label_skip_reason = NULL
-            WHERE id = ?
+            SET han_label = $1,
+                is_political = $2,
+                label_confidence = $3,
+                label_skip_reason = NULL,
+                stage_a_status = 'done',
+                stage_a_batch_id = NULL,
+                stage_a_last_error = NULL,
+                stage_b_status = CASE
+                    WHEN $2 = 1 AND stage_b_status = 'n/a' THEN 'pending'
+                    WHEN $2 = 0 THEN 'n/a'
+                    ELSE stage_b_status
+                END,
+                stage_b_batch_id = CASE WHEN $2 = 0 THEN NULL ELSE stage_b_batch_id END,
+                stage_b_last_error = CASE WHEN $2 = 0 THEN NULL ELSE stage_b_last_error END
+            WHERE id = $4
         `,
         [
             labels.hanLabel,
@@ -289,8 +311,11 @@ async function markPostLabelSkipped(id, reason) {
     await db.run(
         `
             UPDATE posts
-            SET label_skip_reason = ?
-            WHERE id = ?
+            SET label_skip_reason = $1,
+                stage_a_status = 'failed',
+                stage_a_last_error = $1,
+                stage_a_batch_id = NULL
+            WHERE id = $2
         `,
         [String(reason || "request_failed_after_retry"), id]
     );
@@ -302,16 +327,19 @@ async function savePoliticalSublabels(id, sublabels = {}, confidence = {}) {
     await db.run(
         `
             UPDATE posts
-            SET partisan_animosity = ?,
-                support_undemocratic_practices = ?,
-                support_partisan_violence = ?,
-                support_undemocratic_candidates = ?,
-                opposition_bipartisan_cooperation = ?,
-                social_distrust = ?,
-                social_distance = ?,
-                biased_evaluation_politicized_facts = ?,
-                label_confidence_json = ?
-            WHERE id = ?
+            SET partisan_animosity = $1,
+                support_undemocratic_practices = $2,
+                support_partisan_violence = $3,
+                support_undemocratic_candidates = $4,
+                opposition_bipartisan_cooperation = $5,
+                social_distrust = $6,
+                social_distance = $7,
+                biased_evaluation_politicized_facts = $8,
+                label_confidence = $9,
+                stage_b_status = 'done',
+                stage_b_batch_id = NULL,
+                stage_b_last_error = NULL
+            WHERE id = $10
         `,
         [
             sublabels.partisan_animosity,
@@ -331,15 +359,15 @@ async function savePoliticalSublabels(id, sublabels = {}, confidence = {}) {
 async function mergeConfidenceByPostId(id, nextConfidence) {
     const rows = await db.all(
         `
-            SELECT label_confidence_json
+            SELECT label_confidence
             FROM posts
-            WHERE id = ?
+            WHERE id = $1
             LIMIT 1
         `,
         [id]
     );
 
-    const existing = rows?.[0]?.label_confidence_json ? JSON.parse(rows[0].label_confidence_json) : {};
+    const existing = rows?.[0]?.label_confidence || {};
     return {
         ...existing,
         ...(nextConfidence || {}),
@@ -353,22 +381,40 @@ function mapRowToPost(row) {
     }, {});
 
     return {
-        id: row.id,
+        id: Number(row.id),
         platform: row.platform,
         tweetId: row.tweet_id,
-        author: row.author_json ? JSON.parse(row.author_json) : null,
-        postedAt: row.posted_at,
+        author: row.author || null,
+        postedAt: formatTimestamp(row.posted_at),
         text: row.text,
-        media: row.media_json ? JSON.parse(row.media_json) : null,
-        quotedPost: row.quoted_post ? JSON.parse(row.quoted_post) : null,
-        capturedAt: row.captured_at,
-        receivedAt: row.received_at,
+        media: row.media || null,
+        quotedPost: row.quoted_post || null,
+        capturedAt: row.captured_at == null ? null : Number(row.captured_at),
+        receivedAt: formatTimestamp(row.received_at),
         hanLabel: row.han_label,
         isPolitical: row.is_political,
-        labelConfidence: row.label_confidence_json ? JSON.parse(row.label_confidence_json) : null,
+        labelConfidence: row.label_confidence || null,
         labelSkipReason: row.label_skip_reason || null,
+        stageAStatus: row.stage_a_status,
+        stageBStatus: row.stage_b_status,
+        stageABatchId: row.stage_a_batch_id == null ? null : Number(row.stage_a_batch_id),
+        stageBBatchId: row.stage_b_batch_id == null ? null : Number(row.stage_b_batch_id),
+        stageALastError: row.stage_a_last_error || null,
+        stageBLastError: row.stage_b_last_error || null,
         extraLabels,
     };
+}
+
+function formatTimestamp(value) {
+    if (value == null) {
+        return null;
+    }
+
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+
+    return value;
 }
 
 function assertValidExtraLabelColumn(column) {

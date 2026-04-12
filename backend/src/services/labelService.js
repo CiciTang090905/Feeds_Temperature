@@ -1,12 +1,12 @@
-const { EXTRA_LABELS } = require("../config/labelCatalog");
+const { EXTRA_LABELS } = require("../labeling/shared/catalog");
 const {
-    BATCH_PROMPT_TEMPLATE,
     FIRST_PASS_PROMPT_TEMPLATE,
-    IMAGE_SUPPORT_INSTRUCTION,
     LEGACY_HAN_PROMPT_TEMPLATE,
     POLITICAL_SUBLABELS_PROMPT_TEMPLATE,
     STRICT_CLASSIFIER_DEVELOPER_MESSAGE,
-} = require("../config/labelPrompts");
+    buildPostPromptContext,
+    buildUserMessage,
+} = require("../labeling/shared/prompts");
 
 async function classifyHanAndPolitical(postText, imageUrl = null, quotedPost = null) {
     const prompt = FIRST_PASS_PROMPT_TEMPLATE.replace("{POST}", buildPostPromptContext(postText, quotedPost));
@@ -75,31 +75,6 @@ async function classifyPoliticalSublabels(postText, imageUrl = null, quotedPost 
     };
 }
 
-function buildUserMessage(prompt, imageUrl) {
-    if (!imageUrl) {
-        return {
-            role: "user",
-            content: prompt,
-        };
-    }
-
-    return {
-        role: "user",
-        content: [
-            {
-                type: "text",
-                text: `${prompt}\n\n${IMAGE_SUPPORT_INSTRUCTION}`,
-            },
-            {
-                type: "image_url",
-                image_url: {
-                    url: imageUrl,
-                },
-            },
-        ],
-    };
-}
-
 function normalizeBinaryValue(value) {
     if (value === 0 || value === "0") return 0;
     if (value === 1 || value === "1") return 1;
@@ -133,42 +108,6 @@ function buildPrompt(postText) {
     return LEGACY_HAN_PROMPT_TEMPLATE.replace("{POST}", postText);
 }
 
-function buildPostPromptContext(postText, quotedPost) {
-    const primaryText = String(postText || "").trim();
-    const lines = [
-        "[PRIMARY_POST_TEXT]",
-        primaryText || "(empty)",
-        "[/PRIMARY_POST_TEXT]",
-    ];
-
-    if (quotedPost && typeof quotedPost === "object") {
-        const quotedText = String(quotedPost.text || "").trim();
-        const quotedUrl = String(quotedPost.url || "").trim();
-        const quotedTweetId = String(quotedPost.tweetId || "").trim();
-        const quotedImages = Array.isArray(quotedPost?.media?.images) ? quotedPost.media.images.filter(Boolean) : [];
-        const hasQuotedContext = Boolean(quotedText || quotedUrl || quotedTweetId || quotedImages.length > 0);
-
-        if (hasQuotedContext) {
-            lines.push("[QUOTED_POST_CONTEXT]");
-            if (quotedUrl) lines.push(`url: ${quotedUrl}`);
-            if (quotedTweetId) lines.push(`tweet_id: ${quotedTweetId}`);
-            lines.push("[QUOTED_POST_TEXT]");
-            lines.push(quotedText || "(none)");
-            lines.push("[/QUOTED_POST_TEXT]");
-            lines.push("[QUOTED_POST_IMAGES]");
-            lines.push(quotedImages.length > 0 ? quotedImages.join("\n") : "(none)");
-            lines.push("[/QUOTED_POST_IMAGES]");
-            lines.push("[/QUOTED_POST_CONTEXT]");
-            return lines.join("\n");
-        }
-    }
-
-    lines.push("[QUOTED_POST_CONTEXT]");
-    lines.push("(none)");
-    lines.push("[/QUOTED_POST_CONTEXT]");
-    return lines.join("\n");
-}
-
 async function classifyPostText(postText) {
     const data = await runChatCompletion([
         {
@@ -195,101 +134,6 @@ async function classifyPostText(postText) {
     };
 }
 
-async function classifyPostsForLabel(posts, labelConfig) {
-    if (!Array.isArray(posts) || posts.length === 0) {
-        throw new Error("classifyPostsForLabel requires at least one post.");
-    }
-
-    const prompt = buildBatchPrompt(posts, labelConfig);
-    const data = await runChatCompletion([
-        {
-            role: "developer",
-            content: "You are a strict classifier. Return only the requested JSON array and no extra text.",
-        },
-        {
-            role: "user",
-            content: prompt,
-        },
-    ], { maxCompletionTokens: 1024 });
-
-    const output = extractChatOutput(data);
-    const labelsById = parseBatchLabelOutput(output, posts.map((post) => String(post.id)));
-
-    return {
-        results: posts.map((post) => ({
-            id: post.id,
-            label: labelsById.get(String(post.id)),
-        })),
-        model: data.model || getAzureConfig().deployment,
-        rawOutput: output,
-    };
-}
-
-function buildBatchPrompt(posts, labelConfig) {
-    const inputLines = posts
-        .map((post) => JSON.stringify({ id: String(post.id), message: post.text || "" }))
-        .join("\n");
-
-    const optionalGuidance = labelConfig.extraGuidance || "";
-
-    return BATCH_PROMPT_TEMPLATE
-        .replaceAll("{{LABEL_NAME}}", labelConfig.name)
-        .replace("{{LABEL_DEFINITION}}", labelConfig.definition)
-        .replace("{{OPTIONAL_EXTRA_GUIDANCE}}", optionalGuidance)
-        .replace("{{INPUT_MESSAGES}}", inputLines);
-}
-
-function parseBatchLabelOutput(output, expectedIds) {
-    const parsed = parseJsonArrayOutput(output);
-    const answers = new Map();
-
-    for (const item of parsed) {
-        const id = String(item?.id || "");
-        const label = normalizeYesNo(item?.answer);
-
-        if (!id) {
-            throw new Error(`Batch label output is missing id: ${JSON.stringify(item)}`);
-        }
-
-        if (label === null) {
-            throw new Error(`Batch label output has invalid answer for id ${id}: ${JSON.stringify(item?.answer)}`);
-        }
-
-        answers.set(id, label);
-    }
-
-    for (const id of expectedIds) {
-        if (!answers.has(id)) {
-            throw new Error(`Batch label output missing expected id ${id}.`);
-        }
-    }
-
-    return answers;
-}
-
-function parseJsonArrayOutput(output) {
-    const raw = String(output || "").trim();
-
-    try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-    } catch (error) {
-        // Fallback for models that wrap the JSON with extra text.
-    }
-
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) {
-        throw new Error(`No JSON array found in model output: ${JSON.stringify(output)}`);
-    }
-
-    const parsed = JSON.parse(match[0]);
-    if (!Array.isArray(parsed)) {
-        throw new Error(`Model output JSON is not an array: ${JSON.stringify(output)}`);
-    }
-
-    return parsed;
-}
-
 function parseJsonObjectOutput(output) {
     const raw = String(output || "").trim();
 
@@ -313,15 +157,6 @@ function parseJsonObjectOutput(output) {
     }
 
     return parsed;
-}
-
-function normalizeYesNo(answer) {
-    const value = String(answer || "").trim().toUpperCase();
-
-    if (value === "YES") return 1;
-    if (value === "NO") return 0;
-
-    return null;
 }
 
 async function runChatCompletion(messages, options = {}) {
@@ -450,5 +285,4 @@ module.exports = {
     classifyHanAndPolitical,
     classifyPoliticalSublabels,
     classifyPostText,
-    classifyPostsForLabel,
 };

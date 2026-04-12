@@ -4,18 +4,30 @@
   "description": "Express backend for ingesting captured X posts.",
   "main": "src/server.js",
   "scripts": {
+    "test": "jest --runInBand",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "db:migrate": "node scripts/runDbMigrate.js up",
+    "db:rollback": "node scripts/runDbMigrate.js down 1",
+    "db:migrate:create": "node scripts/createDbMigration.js",
+    "batch:submit-now": "node scripts/batchSubmitNow.js",
+    "batch:poll-now": "node scripts/batchPollNow.js",
+    "batch:status": "node scripts/batchStatus.js",
     "label:one": "node scripts/labelOnePost.js",
     "label:all": "node scripts/labelUnlabeledPosts.js",
     "label:watch": "node scripts/labelUnlabeledPosts.js --watch",
     "labels:show": "node scripts/showLatestLabels.js",
-    "label:eval15": "node scripts/evaluateLabelAgreement.js 15"
+    "label:eval15": "node scripts/evaluateLabelAgreement.js 15",
+    "db:copy:sqlite": "node scripts/migrate-sqlite-to-postgres.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "jest": "^30.3.0",
+    "node-pg-migrate": "^8.0.4",
+    "openai": "^6.34.0",
+    "pg": "^8.20.0",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {

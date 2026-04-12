@@ -1,192 +1,120 @@
-const fs = require("fs");
-const path = require("path");
-const sqlite3 = require("sqlite3").verbose();
-const { EXTRA_LABEL_COLUMNS } = require("../config/labelCatalog");
+const { Pool } = require("pg");
+const { getDatabaseUrl, runDbMigrations } = require("./migrate");
 
-const dataDir = path.resolve(__dirname, "../../data");
-const dbPath = path.join(dataDir, "feeds-temperature.db");
+let poolInstance = null;
+let initializationPromise = null;
 
-let dbInstance = null;
+function getPool() {
+    if (poolInstance) {
+        return poolInstance;
+    }
 
-function getDb() {
-    if (dbInstance) return dbInstance;
-
-    fs.mkdirSync(dataDir, { recursive: true });
-    dbInstance = new sqlite3.Database(dbPath);
-    return dbInstance;
-}
-
-function run(sql, params = []) {
-    const db = getDb();
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function onRun(err) {
-            if (err) {
-                reject(err);
-                return;
-            }
-
-            resolve({
-                lastID: this.lastID,
-                changes: this.changes,
-            });
-        });
+    poolInstance = new Pool({
+        connectionString: getDatabaseUrl(),
     });
-}
 
-function all(sql, params = []) {
-    const db = getDb();
-    return new Promise((resolve, reject) => {
-        db.all(sql, params, (err, rows) => {
-            if (err) {
-                reject(err);
-                return;
-            }
-
-            resolve(rows);
-        });
+    poolInstance.on("error", (error) => {
+        console.error("Unexpected Postgres pool error:", error);
     });
+
+    return poolInstance;
 }
 
-async function hasColumn(tableName, columnName) {
-    const columns = await all(`PRAGMA table_info(${tableName})`);
-    return columns.some((column) => column.name === columnName);
+async function ensureInitialized() {
+    if (!initializationPromise) {
+        initializationPromise = (async () => {
+            await runDbMigrations();
+            return getPool();
+        })().catch((error) => {
+            initializationPromise = null;
+            throw error;
+        });
+    }
+
+    await initializationPromise;
+    return getPool();
 }
 
-async function migratePostsTable() {
-    const hasPageUrl = await hasColumn("posts", "page_url");
-    const hasLabel = await hasColumn("posts", "han_label");
-    const hasIsPolitical = await hasColumn("posts", "is_political");
-    const hasLabelConfidenceJson = await hasColumn("posts", "label_confidence_json");
-    const hasLabelSkipReason = await hasColumn("posts", "label_skip_reason");
-    const hasQuotedPost = await hasColumn("posts", "quoted_post");
-    const hasQuotedPostJson = await hasColumn("posts", "quoted_post_json");
-    const hasLabelModel = await hasColumn("posts", "label_model");
-    const hasLabelError = await hasColumn("posts", "label_error");
-    const extraLabelColumnsSql = EXTRA_LABEL_COLUMNS.map((column) => `${column} INTEGER`).join(",\n                ");
-    const quotedPostSelectExpression = hasQuotedPost && hasQuotedPostJson
-        ? "COALESCE(quoted_post, quoted_post_json)"
-        : hasQuotedPost
-            ? "quoted_post"
-            : hasQuotedPostJson
-                ? "quoted_post_json"
-                : "NULL";
+async function run(sql, params = [], client = null) {
+    const result = await query(sql, params, client);
+    const insertedId = result.rows?.[0]?.id;
 
-    if (hasPageUrl || hasLabelModel || hasLabelError || hasQuotedPostJson) {
-        await run("ALTER TABLE posts RENAME TO posts_old");
-        await run(`
-            CREATE TABLE posts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                platform TEXT NOT NULL,
-                tweet_id TEXT NOT NULL,
-                author_json TEXT,
-                posted_at TEXT,
-                text TEXT NOT NULL,
-                media_json TEXT,
-                quoted_post TEXT,
-                captured_at INTEGER,
-                received_at TEXT NOT NULL,
-                han_label INTEGER,
-                is_political INTEGER,
-                label_confidence_json TEXT,
-                label_skip_reason TEXT,
-                ${extraLabelColumnsSql},
-                UNIQUE(platform, tweet_id)
-            )
-        `);
-        await run(`
-            INSERT INTO posts (
-                id,
-                platform,
-                tweet_id,
-                author_json,
-                posted_at,
-                text,
-                media_json,
-                quoted_post,
-                captured_at,
-                received_at,
-                han_label,
-                is_political,
-                label_confidence_json,
-                label_skip_reason
-            )
-            SELECT
-                id,
-                platform,
-                tweet_id,
-                author_json,
-                posted_at,
-                text,
-                media_json,
-                ${quotedPostSelectExpression} AS quoted_post,
-                captured_at,
-                received_at,
-                han_label,
-                NULL AS is_political,
-                NULL AS label_confidence_json,
-                NULL AS label_skip_reason
-            FROM posts_old
-        `);
-        await run("DROP TABLE posts_old");
-    } else {
-        if (!hasLabel) {
-            await run("ALTER TABLE posts ADD COLUMN han_label INTEGER");
-        }
+    return {
+        lastID: insertedId == null ? null : Number(insertedId),
+        changes: result.rowCount || 0,
+    };
+}
 
-        for (const column of EXTRA_LABEL_COLUMNS) {
-            const hasExtraLabelColumn = await hasColumn("posts", column);
-            if (!hasExtraLabelColumn) {
-                await run(`ALTER TABLE posts ADD COLUMN ${column} INTEGER`);
-            }
-        }
+async function all(sql, params = [], client = null) {
+    const result = await query(sql, params, client);
+    return result.rows;
+}
+
+async function query(sql, params = [], client = null) {
+    const executor = client || await ensureInitialized();
+    return executor.query(sql, params);
+}
+
+async function withTransaction(callback) {
+    const pool = await ensureInitialized();
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+        const result = await callback({
+            all: (sql, params = []) => all(sql, params, client),
+            query: (sql, params = []) => query(sql, params, client),
+            run: (sql, params = []) => runInClient(client, sql, params),
+        });
+        await client.query("COMMIT");
+        return result;
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+    } finally {
+        client.release();
     }
+}
 
-    if (!(await hasColumn("posts", "is_political"))) {
-        await run("ALTER TABLE posts ADD COLUMN is_political INTEGER");
-    }
+async function runInClient(client, sql, params = []) {
+    const result = await query(sql, params, client);
+    const insertedId = result.rows?.[0]?.id;
 
-    if (!(await hasColumn("posts", "label_confidence_json"))) {
-        await run("ALTER TABLE posts ADD COLUMN label_confidence_json TEXT");
-    }
-
-    if (!hasLabelSkipReason && !(await hasColumn("posts", "label_skip_reason"))) {
-        await run("ALTER TABLE posts ADD COLUMN label_skip_reason TEXT");
-    }
-
-    if (!(await hasColumn("posts", "quoted_post"))) {
-        await run("ALTER TABLE posts ADD COLUMN quoted_post TEXT");
-    }
+    return {
+        lastID: insertedId == null ? null : Number(insertedId),
+        changes: result.rowCount || 0,
+    };
 }
 
 async function initializeDatabase() {
-    const extraLabelColumnsSql = EXTRA_LABEL_COLUMNS.map((column) => `${column} INTEGER`).join(",\n            ");
+    await ensureInitialized();
+}
 
-    await run(`
-        CREATE TABLE IF NOT EXISTS posts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            platform TEXT NOT NULL,
-            tweet_id TEXT NOT NULL,
-            author_json TEXT,
-            posted_at TEXT,
-            text TEXT NOT NULL,
-            media_json TEXT,
-            quoted_post TEXT,
-            captured_at INTEGER,
-            received_at TEXT NOT NULL,
-            han_label INTEGER,
-            is_political INTEGER,
-            label_confidence_json TEXT,
-            label_skip_reason TEXT,
-            ${extraLabelColumnsSql},
-            UNIQUE(platform, tweet_id)
-        )
-    `);
+async function closeDatabase() {
+    if (initializationPromise) {
+        try {
+            await initializationPromise;
+        } catch (error) {
+            // Allow cleanup after failed initialization attempts.
+        }
+    }
 
-    await migratePostsTable();
+    initializationPromise = null;
+
+    if (!poolInstance) {
+        return;
+    }
+
+    const pool = poolInstance;
+    poolInstance = null;
+    await pool.end();
 }
 
 module.exports = {
     all,
+    closeDatabase,
     initializeDatabase,
+    query,
     run,
+    withTransaction,
 };

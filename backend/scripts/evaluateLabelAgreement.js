@@ -1,11 +1,11 @@
 const fs = require("fs");
 const path = require("path");
-const dotenv = require("dotenv");
-const { initializeDatabase, all } = require("../src/db/database");
+
+require("../src/config/loadEnv");
+
+const { all, closeDatabase, initializeDatabase } = require("../src/db/database");
 const { EXTRA_LABELS } = require("../src/config/labelCatalog");
 const { classifyHanAndPolitical, classifyPoliticalSublabels } = require("../src/services/labelService");
-
-dotenv.config({ path: path.join(process.cwd(), ".env") });
 
 const DEFAULT_SAMPLE_SIZE = 15;
 const TEMP_DIR = path.resolve(__dirname, "../tmp");
@@ -55,14 +55,14 @@ async function main() {
 }
 
 async function getSampledPosts(limit) {
-    const selectSublabels = EXTRA_LABELS.map((label) => label.column).join(",\n            ");
+    const selectSublabels = EXTRA_LABELS.map((label) => label.column).join(",\n                ");
 
     return all(
         `
             SELECT
                 id,
                 text,
-                media_json,
+                media,
                 quoted_post,
                 han_label,
                 is_political,
@@ -71,7 +71,7 @@ async function getSampledPosts(limit) {
             WHERE han_label IS NOT NULL
               AND is_political IS NOT NULL
             ORDER BY RANDOM()
-            LIMIT ?
+            LIMIT $1
         `,
         [limit]
     ).then((rows) => rows.map(mapRow));
@@ -80,17 +80,10 @@ async function getSampledPosts(limit) {
 function mapRow(row) {
     return {
         ...row,
-        media: row.media_json ? safeJsonParse(row.media_json) : null,
-        quotedPost: row.quoted_post ? safeJsonParse(row.quoted_post) : null,
+        id: Number(row.id),
+        media: row.media || null,
+        quotedPost: row.quoted_post || null,
     };
-}
-
-function safeJsonParse(value) {
-    try {
-        return JSON.parse(value);
-    } catch (error) {
-        return null;
-    }
 }
 
 function extractImageContextUrl(media) {
@@ -225,7 +218,10 @@ function createLogger() {
     };
 }
 
-main().catch((error) => {
-    console.error("evaluateLabelAgreement failed:", error.message);
-    process.exit(1);
-});
+main()
+    .then(() => closeDatabase())
+    .catch(async (error) => {
+        console.error("evaluateLabelAgreement failed:", error.message);
+        await closeDatabase().catch(() => {});
+        process.exit(1);
+    });

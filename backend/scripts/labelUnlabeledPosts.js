@@ -1,9 +1,7 @@
-const path = require("path");
-const dotenv = require("dotenv");
-const { initializeDatabase } = require("../src/db/database");
-const { labelOnce, startLabelWorker } = require("../src/services/labelWorker");
+require("../src/config/loadEnv");
 
-dotenv.config({ path: path.join(process.cwd(), ".env") });
+const { closeDatabase, initializeDatabase } = require("../src/db/database");
+const { labelOnce, startLabelWorker } = require("../src/labeling/sync/labelWorker");
 
 async function main() {
     const watchMode = process.argv.includes("--watch");
@@ -18,7 +16,22 @@ async function main() {
     startLabelWorker();
 }
 
-main().catch((error) => {
-    console.error("labelUnlabeledPosts failed:", error.message);
-    process.exit(1);
-});
+main()
+    .then(async () => {
+        if (!process.argv.includes("--watch")) {
+            await closeDatabase();
+        }
+    })
+    .catch(async (error) => {
+        console.error("labelUnlabeledPosts failed:", error.message);
+        await closeDatabase().catch(() => {});
+        process.exit(1);
+    });
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+    process.on(signal, () => {
+        closeDatabase()
+            .catch(() => {})
+            .finally(() => process.exit(0));
+    });
+}

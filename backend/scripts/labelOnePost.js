@@ -1,9 +1,7 @@
-const path = require("path");
-const dotenv = require("dotenv");
-const sqlite3 = require("sqlite3").verbose();
-const { classifyPostText } = require("../src/services/labelService");
+require("../src/config/loadEnv");
 
-dotenv.config({ path: path.join(process.cwd(), ".env") });
+const { all, closeDatabase, initializeDatabase } = require("../src/db/database");
+const { classifyPostText } = require("../src/services/labelService");
 
 async function main() {
     const postText = await resolveInputText(process.argv.slice(2));
@@ -30,37 +28,28 @@ async function resolveInputText(args) {
     return getPostText(postId);
 }
 
-function getPostText(postId) {
-    const dbPath = path.resolve(__dirname, "../data/feeds-temperature.db");
-    const sql = postId
-        ? "SELECT text FROM posts WHERE id = ?"
-        : "SELECT text FROM posts ORDER BY id DESC LIMIT 1";
-    const params = postId ? [postId] : [];
+async function getPostText(postId) {
+    await initializeDatabase();
 
-    return new Promise((resolve, reject) => {
-        const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (openError) => {
-            if (openError) reject(openError);
-        });
+    const rows = await all(
+        postId
+            ? "SELECT text FROM posts WHERE id = $1 LIMIT 1"
+            : "SELECT text FROM posts ORDER BY id DESC LIMIT 1",
+        postId ? [postId] : []
+    );
+    const row = rows[0];
 
-        db.get(sql, params, (error, row) => {
-            db.close();
+    if (!row || !row.text) {
+        throw new Error("No posts found in the database.");
+    }
 
-            if (error) {
-                reject(error);
-                return;
-            }
-
-            if (!row || !row.text) {
-                reject(new Error("No posts found in the database."));
-                return;
-            }
-
-            resolve(row.text);
-        });
-    });
+    return row.text;
 }
 
-main().catch((error) => {
-    console.error("labelOnePost failed:", error.message);
-    process.exit(1);
-});
+main()
+    .then(() => closeDatabase())
+    .catch(async (error) => {
+        console.error("labelOnePost failed:", error.message);
+        await closeDatabase().catch(() => {});
+        process.exit(1);
+    });
