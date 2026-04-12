@@ -26,6 +26,9 @@ Recommended backend setup:
 ## Routes
 
 - `GET /health` -> service health.
+- `POST /api/users/register` -> create a pseudonymous account from a generated access code.
+- `POST /api/users/login` -> restore account access from an access code.
+- `PATCH /api/users/me` -> update the signed-in username.
 - `POST /api/posts/batch` -> ingest a batch of captured posts.
 - `GET /api/posts` -> list stored posts (newest first).
 - `GET /api/posts/stats` -> aggregate post and label statistics for UI display.
@@ -56,8 +59,9 @@ Political metric keys include:
 ## Storage and labeling behavior
 
 - Managed Postgres via `DATABASE_URL`
-- Deduplication: `UNIQUE(platform, tweet_id)` on `posts`
+- Deduplication: `UNIQUE(user_id, platform, tweet_id)` on `posts`
 - `author`, `media`, `quoted_post`, and `label_confidence` are stored as Postgres `JSONB`
+- Posts are scoped to a `users` row and identified by a bearer access code hashed in the backend.
 - Labeling can run in two modes:
   - sync worker when `LABEL_BATCH_ENABLED=0`
   - OpenAI Batch scheduler when `LABEL_BATCH_ENABLED=1`

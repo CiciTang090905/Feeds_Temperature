@@ -21,6 +21,7 @@ async function main() {
 
     try {
         await sqliteRun(sqliteDb, "PRAGMA wal_checkpoint(TRUNCATE);");
+        const legacyUserId = await getLegacyOwnerUserId(postgresPool);
 
         const sourceColumns = await getSourceColumns(sqliteDb);
         const totalRows = await getTotalPosts(sqliteDb);
@@ -39,7 +40,10 @@ async function main() {
                 break;
             }
 
-            const inserted = await insertPostBatch(postgresPool, rows.map(mapSqliteRowToPostgresValues));
+            const inserted = await insertPostBatch(
+                postgresPool,
+                rows.map((row) => mapSqliteRowToPostgresValues(row, legacyUserId))
+            );
             copiedCount += inserted;
             offset += rows.length;
 
@@ -155,9 +159,10 @@ function selectSourceExpression(sourceColumns, candidates, alias) {
     return `NULL AS ${alias}`;
 }
 
-function mapSqliteRowToPostgresValues(row) {
+function mapSqliteRowToPostgresValues(row, legacyUserId) {
     return {
         id: Number(row.id),
+        user_id: Number(legacyUserId),
         platform: row.platform,
         tweet_id: row.tweet_id,
         author: safeJsonParse(row.author_json),
@@ -209,6 +214,7 @@ async function insertPostBatch(pool, rows) {
 
     const columns = [
         "id",
+        "user_id",
         "platform",
         "tweet_id",
         "author",
@@ -245,7 +251,7 @@ async function insertPostBatch(pool, rows) {
                     ${columns.join(", ")}
                 ) VALUES
                     ${placeholders.join(",\n                    ")}
-                ON CONFLICT (platform, tweet_id) DO NOTHING
+                ON CONFLICT (user_id, platform, tweet_id) DO NOTHING
             `,
             values
         );
@@ -279,6 +285,26 @@ async function resetPostsIdSequence(pool) {
             (SELECT MAX(id) IS NOT NULL FROM posts)
         )
     `);
+}
+
+async function getLegacyOwnerUserId(pool) {
+    const result = await pool.query(
+        `
+            SELECT id
+            FROM users
+            WHERE username = $1
+            ORDER BY id ASC
+            LIMIT 1
+        `,
+        ["legacy-owner"]
+    );
+
+    const userId = result.rows?.[0]?.id;
+    if (!userId) {
+        throw new Error("Could not find legacy-owner user for SQLite migration.");
+    }
+
+    return Number(userId);
 }
 
 main().catch(async (error) => {

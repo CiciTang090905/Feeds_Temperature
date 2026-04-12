@@ -26,7 +26,7 @@ async function ingestPostsBatch(req, res, next) {
     }
 
     try {
-        const result = await postService.ingestPosts(posts);
+        const result = await postService.ingestPostsForUser(req.user.id, posts);
 
         return res.status(202).json({
             receivedCount: posts.length,
@@ -42,7 +42,7 @@ async function ingestPostsBatch(req, res, next) {
 
 async function listPosts(req, res, next) {
     try {
-        const posts = await postService.getAllPosts();
+        const posts = await postService.getAllPostsForUser(req.user.id);
 
         return res.json({
             count: posts.length,
@@ -55,7 +55,7 @@ async function listPosts(req, res, next) {
 
 async function getPostStats(req, res, next) {
     try {
-        const stats = await postService.getPostStats();
+        const stats = await postService.getPostStatsForUser(req.user.id);
 
         return res.json(stats);
     } catch (error) {
@@ -76,6 +76,7 @@ function streamStatsEvents(req, res) {
     writeEvent("connected", {
         ...getStatsEventState(),
         connectedAt: new Date().toISOString(),
+        userId: req.user.id,
     });
 
     const unsubscribe = onStatsUpdated((payload) => {

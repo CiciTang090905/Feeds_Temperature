@@ -5,6 +5,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SELECT_COLUMNS_SQL = [
     "id",
+    "user_id",
     "platform",
     "tweet_id",
     "author",
@@ -52,6 +53,10 @@ function buildPostKey(post) {
 }
 
 async function ingestPosts(posts) {
+    throw new Error("ingestPosts requires a user context. Use ingestPostsForUser(userId, posts).");
+}
+
+async function ingestPostsForUser(userId, posts) {
     const acceptedIds = [];
     const duplicateIds = [];
 
@@ -63,6 +68,7 @@ async function ingestPosts(posts) {
             const result = await db.run(
                 `
                     INSERT INTO posts (
+                        user_id,
                         platform,
                         tweet_id,
                         author,
@@ -72,11 +78,12 @@ async function ingestPosts(posts) {
                         quoted_post,
                         captured_at,
                         received_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                    ON CONFLICT (platform, tweet_id) DO NOTHING
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    ON CONFLICT (user_id, platform, tweet_id) DO NOTHING
                     RETURNING id
                 `,
                 [
+                    userId,
                     post.platform,
                     post.tweetId,
                     JSON.stringify(post.author || null),
@@ -110,22 +117,35 @@ async function ingestPosts(posts) {
 }
 
 async function getAllPosts() {
+    return getAllPostsForUser(null);
+}
+
+async function getAllPostsForUser(userId) {
     const rows = await db.all(`
         SELECT
             ${SELECT_COLUMNS_SQL}
         FROM posts
+        ${userId == null ? "" : "WHERE user_id = $1"}
         ORDER BY id DESC
-    `);
+    `, userId == null ? [] : [userId]);
 
     return rows.map(mapRowToPost);
 }
 
 async function getPostStats() {
+    return getPostStatsForUser(null);
+}
+
+async function getPostStatsForUser(userId) {
     const dayAgoMs = Date.now() - DAY_MS;
-    const labeledWhereClause = buildLabeledWhereClause();
+    const labeledWhereClause = buildWhereClause(buildUserWhereClause(userId, 1), buildLabeledWhereClause());
+    const baseParams = userId == null ? [] : [userId];
     const [allTime, last24Hours] = await Promise.all([
-        getAggregatedPostStats(labeledWhereClause),
-        getAggregatedPostStats(buildWhereClause(labeledWhereClause, "captured_at IS NOT NULL", "captured_at >= $1"), [dayAgoMs]),
+        getAggregatedPostStats(labeledWhereClause, baseParams),
+        getAggregatedPostStats(
+            buildWhereClause(labeledWhereClause, "captured_at IS NOT NULL", `captured_at >= $${baseParams.length + 1}`),
+            [...baseParams, dayAgoMs]
+        ),
     ]);
 
     return {
@@ -137,6 +157,14 @@ async function getPostStats() {
 function buildLabeledWhereClause() {
     const requiredColumns = ["han_label", "is_political"];
     return requiredColumns.map((column) => `${column} IS NOT NULL`).join(" AND ");
+}
+
+function buildUserWhereClause(userId, paramIndex = 1) {
+    if (userId == null) {
+        return "";
+    }
+
+    return `user_id = $${paramIndex}`;
 }
 
 function buildWhereClause(...clauses) {
@@ -382,6 +410,7 @@ function mapRowToPost(row) {
 
     return {
         id: Number(row.id),
+        userId: row.user_id == null ? null : Number(row.user_id),
         platform: row.platform,
         tweetId: row.tweet_id,
         author: row.author || null,
@@ -425,11 +454,14 @@ function assertValidExtraLabelColumn(column) {
 
 module.exports = {
     getAllPosts,
+    getAllPostsForUser,
     getPostStats,
+    getPostStatsForUser,
     getUnlabeledPosts,
     getUnlabeledPostsForPoliticalSublabels,
     getUnlabeledPostsByLabelColumn,
     ingestPosts,
+    ingestPostsForUser,
     markPostLabelSkipped,
     saveHanAndPoliticalLabels,
     savePostLabel,
