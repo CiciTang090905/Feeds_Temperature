@@ -1,6 +1,5 @@
 const CAPTURE_STORAGE_KEY = "captured_posts";
 const BACKEND_STATS_URL = "http://localhost:3001/api/posts/stats";
-const BACKEND_STATS_EVENTS_URL = "http://localhost:3001/api/posts/events";
 const STATS_PANEL_ID = "feeds-temperature-stats-panel";
 const STATS_PANEL_HEADER_ID = "feeds-temperature-stats-panel-header";
 const STATS_PANEL_BODY_ID = "feeds-temperature-stats-panel-body";
@@ -11,7 +10,6 @@ const PANEL_DEFAULT_MIN_HEIGHT = "180px";
 const capturedIds = new Set();
 const tweetIdRegex = /\/status\/([0-9]+)/;
 let statsPanelTimerId = null;
-let statsEventsSource = null;
 const panelState = {
     drag: null,
     expandedHeight: PANEL_DEFAULT_HEIGHT,
@@ -495,7 +493,23 @@ async function refreshStatsPanel() {
     if (!panelBody) return;
 
     try {
-        const response = await fetch(BACKEND_STATS_URL);
+        const token = await getStoredAccessToken();
+        if (!token) {
+            panelBody.textContent = "Sign in through the extension settings to view your stats.";
+            return;
+        }
+
+        const response = await fetch(BACKEND_STATS_URL, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+        if (response.status === 401) {
+            await handleUnauthorizedSession();
+            panelBody.textContent = "Your access code is missing or invalid. Reconnect in extension settings.";
+            return;
+        }
+
         if (!response.ok) {
             throw new Error(`Backend responded with ${response.status}`);
         }
@@ -511,36 +525,11 @@ function startStatsPanel() {
     const panel = ensureStatsPanel();
     observeStatsPanelResize(panel);
     initStatsPanelViewportHandlers();
-    startStatsEventsStream();
     keepStatsPanelInViewport();
     refreshStatsPanel();
 
     if (statsPanelTimerId) clearInterval(statsPanelTimerId);
     statsPanelTimerId = setInterval(refreshStatsPanel, STATS_REFRESH_MS);
-}
-
-function stopStatsEventsStream() {
-    if (!statsEventsSource) return;
-    statsEventsSource.close();
-    statsEventsSource = null;
-}
-
-function startStatsEventsStream() {
-    if (typeof EventSource !== "function") return;
-    if (statsEventsSource) return;
-
-    const source = new EventSource(BACKEND_STATS_EVENTS_URL);
-    statsEventsSource = source;
-
-    source.addEventListener("stats_updated", () => {
-        refreshStatsPanel();
-    });
-
-    source.onerror = () => {
-        if (statsEventsSource !== source) return;
-        stopStatsEventsStream();
-        // Polling continues even if SSE is unavailable.
-    };
 }
 
 function loadCapturedPosts() {
@@ -656,7 +645,22 @@ window.clearStoredPosts = async function () {
 window.stopPostCapture = function () {
     if (captureTimerId) clearInterval(captureTimerId);
     if (statsPanelTimerId) clearInterval(statsPanelTimerId);
-    stopStatsEventsStream();
     captureStarted = false;
     console.log("Capture stopped");
 };
+
+function getStoredAccessToken() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get("user_session", (result) => {
+            resolve(result.user_session?.token || "");
+        });
+    });
+}
+
+function handleUnauthorizedSession() {
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "HANDLE_UNAUTHORIZED" }, () => {
+            resolve();
+        });
+    });
+}

@@ -11,8 +11,10 @@ let server = null;
 async function startServer() {
     await initializeDatabase();
     if (process.env.LABEL_BATCH_ENABLED === "1") {
+        console.log("Starting backend in batch labeling mode.");
         startBatchScheduler();
     } else {
+        console.log("Starting backend in sync labeling mode.");
         startLabelWorker();
     }
 

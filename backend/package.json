@@ -13,6 +13,7 @@
     "batch:submit-now": "node scripts/batchSubmitNow.js",
     "batch:poll-now": "node scripts/batchPollNow.js",
     "batch:status": "node scripts/batchStatus.js",
+    "batch:inspect": "node scripts/batchInspect.js",
     "label:one": "node scripts/labelOnePost.js",
     "label:all": "node scripts/labelUnlabeledPosts.js",
     "label:watch": "node scripts/labelUnlabeledPosts.js --watch",

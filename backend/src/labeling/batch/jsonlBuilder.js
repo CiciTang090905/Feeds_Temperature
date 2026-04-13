@@ -1,7 +1,9 @@
 const { EXTRA_LABELS, STAGE_A_LABELS } = require("../shared/catalog");
 const {
     STRICT_CLASSIFIER_DEVELOPER_MESSAGE,
-    buildSingleLabelBatchPrompt,
+    buildHanBatchPrompt,
+    buildPoliticalBatchPrompt,
+    buildSublabelBatchPrompt,
     buildUserMessage,
 } = require("../shared/prompts");
 const { encode } = require("./customId");
@@ -33,14 +35,7 @@ function buildRequests(posts, model, stage, labelConfigs) {
 
 function buildRequestLine(post, model, stage, labelConfig) {
     const imageUrl = extractImageContextUrl(post);
-    const prompt = buildSingleLabelBatchPrompt({
-        labelDefinition: labelConfig.definition,
-        labelGuidance: labelConfig.extraGuidance,
-        labelName: labelConfig.name,
-        postText: post.text || "",
-        quotedPost: post.quotedPost || null,
-        responseKey: labelConfig.responseKey || labelConfig.key,
-    });
+    const prompt = buildBatchPrompt(post, labelConfig);
 
     return JSON.stringify({
         custom_id: encode({
@@ -67,6 +62,31 @@ function buildRequestLine(post, model, stage, labelConfig) {
     });
 }
 
+function buildBatchPrompt(post, labelConfig) {
+    if (labelConfig.requestKey === "han") {
+        return buildHanBatchPrompt({
+            postText: post.text || "",
+            quotedPost: post.quotedPost || null,
+        });
+    }
+
+    if (labelConfig.requestKey === "political") {
+        return buildPoliticalBatchPrompt({
+            postText: post.text || "",
+            quotedPost: post.quotedPost || null,
+        });
+    }
+
+    return buildSublabelBatchPrompt({
+        labelDefinition: labelConfig.definition,
+        labelGuidance: labelConfig.extraGuidance,
+        labelName: labelConfig.name,
+        postText: post.text || "",
+        quotedPost: post.quotedPost || null,
+        responseKey: labelConfig.responseKey || labelConfig.key,
+    });
+}
+
 function extractImageContextUrl(post) {
     const media = post?.media || {};
     const image = Array.isArray(media.images) ? media.images[0] : null;
@@ -79,5 +99,6 @@ function extractImageContextUrl(post) {
 module.exports = {
     buildPassARequests,
     buildPassBRequests,
+    buildBatchPrompt,
     extractImageContextUrl,
 };

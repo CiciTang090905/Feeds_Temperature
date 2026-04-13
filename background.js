@@ -1,63 +1,87 @@
 const CAPTURE_STORAGE_KEY = "captured_posts";
 const CAPTURE_STATS_KEY = "capture_stats";
 const SYNC_STATUS_KEY = "capture_sync_status";
+const USER_SESSION_KEY = "user_session";
 const BACKEND_BATCH_URL = "http://localhost:3001/api/posts/batch";
 const BACKEND_POSTS_URL = "http://localhost:3001/api/posts";
 const MAX_BATCH_SIZE = 15;
-// Retry failed sync attempts so pending local posts can drain automatically.
 const SYNC_RETRY_INTERVAL_MS = 5000;
 
-// Prevent overlapping sync requests from racing each other.
 let syncInProgress = false;
-// Keep a single scheduled retry at a time.
 let retryTimer = null;
 
 chrome.runtime.onInstalled.addListener(() => {
     console.log("Feeds_temperature extension installed");
+    chrome.runtime.openOptionsPage();
 });
 
 function getStoredPosts() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(CAPTURE_STORAGE_KEY, (result) => {
-            resolve(result[CAPTURE_STORAGE_KEY] || []);
-        });
-    });
+    return readLocal(CAPTURE_STORAGE_KEY, []);
 }
 
 function setStoredPosts(posts) {
-    return new Promise((resolve) => {
-        chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: posts }, resolve);
-    });
+    return writeLocal(CAPTURE_STORAGE_KEY, posts);
 }
 
 function setSyncStatus(status) {
-    return new Promise((resolve) => {
-        chrome.storage.local.set({ [SYNC_STATUS_KEY]: status }, resolve);
-    });
+    return writeLocal(SYNC_STATUS_KEY, status);
 }
 
 function getCaptureStats() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(CAPTURE_STATS_KEY, (result) => {
-            resolve(result[CAPTURE_STATS_KEY] || {
-                totalCapturedCount: 0,
-                totalUploadedCount: 0,
-                lastCapturedAt: null,
-                lastUploadedAt: null,
-            });
-        });
+    return readLocal(CAPTURE_STATS_KEY, {
+        totalCapturedCount: 0,
+        totalUploadedCount: 0,
+        lastCapturedAt: null,
+        lastUploadedAt: null,
     });
 }
 
 function setCaptureStats(stats) {
+    return writeLocal(CAPTURE_STATS_KEY, stats);
+}
+
+function getUserSession() {
+    return readLocal(USER_SESSION_KEY, null);
+}
+
+function setUserSession(session) {
+    return writeLocal(USER_SESSION_KEY, session);
+}
+
+async function clearUserSession() {
     return new Promise((resolve) => {
-        chrome.storage.local.set({ [CAPTURE_STATS_KEY]: stats }, resolve);
+        chrome.storage.local.remove([USER_SESSION_KEY], resolve);
     });
 }
 
 async function fetchBackendPostStats() {
+    const session = await getUserSession();
+    if (!session?.token) {
+        return {
+            ok: false,
+            count: null,
+            recentPosts: [],
+            error: "Sign in required",
+            unauthorized: true,
+        };
+    }
+
     try {
-        const response = await fetch(BACKEND_POSTS_URL);
+        const response = await fetch(BACKEND_POSTS_URL, {
+            headers: buildAuthHeaders(session.token),
+        });
+
+        if (response.status === 401) {
+            await handleUnauthorized();
+            return {
+                ok: false,
+                count: null,
+                recentPosts: [],
+                error: "Sign in required",
+                unauthorized: true,
+            };
+        }
+
         if (!response.ok) {
             throw new Error(`Backend responded with ${response.status}`);
         }
@@ -85,7 +109,19 @@ async function syncCapturedPosts() {
 
     syncInProgress = true;
     let posts = [];
+
     try {
+        const session = await getUserSession();
+        if (!session?.token) {
+            await setSyncStatus({
+                lastSyncedAt: Date.now(),
+                lastResult: "auth_required",
+                pendingCount: (await getStoredPosts()).length,
+            });
+            clearRetryTimer();
+            return { ok: false, reason: "auth_required" };
+        }
+
         posts = await getStoredPosts();
         if (posts.length === 0) {
             const captureStats = await getCaptureStats();
@@ -102,9 +138,17 @@ async function syncCapturedPosts() {
         const batch = posts.slice(0, MAX_BATCH_SIZE);
         const response = await fetch(BACKEND_BATCH_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                ...buildAuthHeaders(session.token),
+                "Content-Type": "application/json",
+            },
             body: JSON.stringify({ posts: batch }),
         });
+
+        if (response.status === 401) {
+            await handleUnauthorized();
+            throw new Error("Sign in required");
+        }
 
         if (!response.ok) {
             throw new Error(`Backend responded with ${response.status}`);
@@ -135,6 +179,7 @@ async function syncCapturedPosts() {
         } else {
             clearRetryTimer();
         }
+
         return { ok: true, syncedCount: ackedIds.size };
     } catch (error) {
         const captureStats = await getCaptureStats();
@@ -145,7 +190,11 @@ async function syncCapturedPosts() {
             totalUploadedCount: captureStats.totalUploadedCount || 0,
             error: error.message,
         });
-        scheduleRetry();
+        if (error.message !== "Sign in required") {
+            scheduleRetry();
+        } else {
+            clearRetryTimer();
+        }
         throw error;
     } finally {
         syncInProgress = false;
@@ -159,14 +208,11 @@ function clearRetryTimer() {
 }
 
 function scheduleRetry() {
-    // Debounce retries so repeated failures do not create timer storms.
     if (retryTimer) return;
 
     retryTimer = setTimeout(() => {
         retryTimer = null;
-        syncCapturedPosts().catch(() => {
-            // Error status is already persisted in syncCapturedPosts catch path.
-        });
+        syncCapturedPosts().catch(() => {});
     }, SYNC_RETRY_INTERVAL_MS);
 }
 
@@ -182,13 +228,52 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             };
             const syncStatus = result[SYNC_STATUS_KEY] || null;
             const backendStats = await fetchBackendPostStats();
+            const session = await getUserSession();
+
             sendResponse({
                 pendingCount: posts.length,
                 captureStats,
                 syncStatus,
                 backendStats,
+                session,
             });
         });
+        return true;
+    }
+
+    if (request.type === "GET_USER_SESSION") {
+        getUserSession().then((session) => sendResponse({ session })).catch((error) => {
+            sendResponse({ session: null, error: error.message });
+        });
+        return true;
+    }
+
+    if (request.type === "SET_USER_SESSION") {
+        setUserSession(request.session || null)
+            .then(() => syncCapturedPosts().catch(() => {}))
+            .then(() => sendResponse({ ok: true }))
+            .catch((error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+    }
+
+    if (request.type === "LOG_OUT") {
+        handleUnauthorized()
+            .then(() => sendResponse({ ok: true }))
+            .catch((error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+    }
+
+    if (request.type === "OPEN_OPTIONS_PAGE") {
+        chrome.runtime.openOptionsPage().then(() => sendResponse({ ok: true })).catch((error) => {
+            sendResponse({ ok: false, error: error.message });
+        });
+        return true;
+    }
+
+    if (request.type === "HANDLE_UNAUTHORIZED") {
+        handleUnauthorized()
+            .then(() => sendResponse({ ok: true }))
+            .catch((error) => sendResponse({ ok: false, error: error.message }));
         return true;
     }
 
@@ -219,7 +304,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// Try flushing any pending local backlog when the service worker is activated.
-syncCapturedPosts().catch(() => {
-    // Retry scheduling is handled in syncCapturedPosts catch path.
-});
+function buildAuthHeaders(token) {
+    return {
+        Authorization: `Bearer ${token}`,
+    };
+}
+
+async function handleUnauthorized() {
+    await clearUserSession();
+    await setSyncStatus({
+        lastSyncedAt: Date.now(),
+        lastResult: "auth_required",
+        pendingCount: (await getStoredPosts()).length,
+    });
+    clearRetryTimer();
+    await chrome.runtime.openOptionsPage();
+}
+
+function readLocal(key, fallbackValue) {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(key, (result) => {
+            resolve(result[key] ?? fallbackValue);
+        });
+    });
+}
+
+function writeLocal(key, value) {
+    return new Promise((resolve) => {
+        chrome.storage.local.set({ [key]: value }, resolve);
+    });
+}
+
+syncCapturedPosts().catch(() => {});

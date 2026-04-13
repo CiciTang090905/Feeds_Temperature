@@ -154,6 +154,66 @@ Output only JSON.
 Post:
 {POST}`;
 
+const HAN_BATCH_PROMPT_TEMPLATE = `Classify the following social media post for exactly one label.
+
+Label name:
+high-arousal negative emotion
+
+Definition:
+activated, intense negativity directed at someone or something
+
+Supporting guidance:
+Examples: anger, rage, outrage, hostility, insults, aggressive blame. Do not label sadness, disappointment, worry, fatigue, neutral reporting, or positive emotions. Focus on the emotional tone of the author, not the topic.
+
+Evidence rules:
+- Use the top-level author's post text as primary evidence.
+- If an image is attached, use it only as supporting context when it changes or clarifies meaning, tone, target, or emotional framing.
+- If quoted-post context is provided, use it only as secondary context for interpreting the top-level post. Do not shift the label target to the quoted author.
+- Ignore decorative or irrelevant visuals.
+- Do not infer facts not supported by the text or image.
+
+Return a JSON object with exactly these fields:
+- highly_aroused_negativity: 0 or 1
+- image_used: true or false
+- confidence: {
+  "highly_aroused_negativity": number between 0 and 1
+}
+
+Output only JSON.
+
+Post:
+{POST}`;
+
+const POLITICAL_BATCH_PROMPT_TEMPLATE = `Classify the following social media post for exactly one label.
+
+Label name:
+political content
+
+Definition:
+content about civic, ideological, governmental, electoral, legal, public-policy, or public-affairs topics
+
+Supporting guidance:
+Political content includes government, elections, voting, laws, policy, courts, politicians, political parties, public officials, candidates, activists, protests, international relations, and wars when discussed as public affairs. Do not label sports, entertainment, celebrity gossip, personal drama, memes, general news with no civic or ideological angle, non-political arguments, lifestyle, shopping, or personal updates unless clearly tied to politics or public issues.
+
+Evidence rules:
+- Use the top-level author's post text as primary evidence.
+- If an image is attached, use it only as supporting context when it changes or clarifies meaning, tone, target, or emotional framing.
+- If quoted-post context is provided, use it only as secondary context for interpreting the top-level post. Do not shift the label target to the quoted author.
+- Ignore decorative or irrelevant visuals.
+- Do not infer facts not supported by the text or image.
+
+Return a JSON object with exactly these fields:
+- is_political: 0 or 1
+- image_used: true or false
+- confidence: {
+  "is_political": number between 0 and 1
+}
+
+Output only JSON.
+
+Post:
+{POST}`;
+
 function buildPostPromptContext(postText, quotedPost) {
     const primaryText = String(postText || "").trim();
     const lines = [
@@ -224,14 +284,38 @@ function buildSingleLabelBatchPrompt({ labelName, labelDefinition, labelGuidance
         .replace("{POST}", buildPostPromptContext(postText, quotedPost));
 }
 
+function buildHanBatchPrompt({ postText, quotedPost }) {
+    return HAN_BATCH_PROMPT_TEMPLATE.replace("{POST}", buildPostPromptContext(postText, quotedPost));
+}
+
+function buildPoliticalBatchPrompt({ postText, quotedPost }) {
+    return POLITICAL_BATCH_PROMPT_TEMPLATE.replace("{POST}", buildPostPromptContext(postText, quotedPost));
+}
+
+function buildSublabelBatchPrompt({ labelName, labelDefinition, labelGuidance, responseKey, postText, quotedPost }) {
+    return buildSingleLabelBatchPrompt({
+        labelName,
+        labelDefinition,
+        labelGuidance,
+        postText,
+        quotedPost,
+        responseKey,
+    });
+}
+
 module.exports = {
     FIRST_PASS_PROMPT_TEMPLATE,
+    HAN_BATCH_PROMPT_TEMPLATE,
     IMAGE_SUPPORT_INSTRUCTION,
     LEGACY_HAN_PROMPT_TEMPLATE,
+    POLITICAL_BATCH_PROMPT_TEMPLATE,
     POLITICAL_SUBLABELS_PROMPT_TEMPLATE,
     SINGLE_LABEL_BATCH_PROMPT_TEMPLATE,
     STRICT_CLASSIFIER_DEVELOPER_MESSAGE,
+    buildHanBatchPrompt,
+    buildPoliticalBatchPrompt,
     buildPostPromptContext,
     buildSingleLabelBatchPrompt,
+    buildSublabelBatchPrompt,
     buildUserMessage,
 };

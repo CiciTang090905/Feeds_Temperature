@@ -19,11 +19,16 @@ async function run(batchJob) {
             `,
             [serializeBatchError(batchJob), batchJob.id]
         );
-        console.error(`Batch job ${batchJob.id} failed fatally.`);
+        console.error(
+            `[batch ingester] failed_fatal local_batch_id=${batchJob.id} remote_batch_id=${batchJob.openai_batch_id} stage=${batchJob.stage}`
+        );
         return;
     }
 
     if (batchJob.status === "cancelled") {
+        console.warn(
+            `[batch ingester] cancelled local_batch_id=${batchJob.id} remote_batch_id=${batchJob.openai_batch_id} stage=${batchJob.stage}`
+        );
         await markBatchPostsFailed(batchJob, "cancelled");
         return;
     }
@@ -32,14 +37,20 @@ async function run(batchJob) {
         return;
     }
 
+    const summary = {
+        failed: 0,
+        staleSkipped: 0,
+        succeeded: 0,
+    };
+
     if (batchJob.openai_output_file_id) {
         const output = await downloadFile(batchJob.openai_output_file_id);
-        await ingestOutputLines(batchJob, output);
+        await ingestOutputLines(batchJob, output, summary);
     }
 
     if (batchJob.openai_error_file_id) {
         const errorFile = await downloadFile(batchJob.openai_error_file_id);
-        await ingestErrorLines(batchJob, errorFile);
+        await ingestErrorLines(batchJob, errorFile, summary);
     }
 
     await db.run(
@@ -51,9 +62,14 @@ async function run(batchJob) {
         `,
         [batchJob.id]
     );
+
+    const backlog = await getBacklogCounts();
+    console.log(
+        `[batch ingester] ingested local_batch_id=${batchJob.id} remote_batch_id=${batchJob.openai_batch_id} stage=${batchJob.stage} status=${batchJob.status} succeeded=${summary.succeeded} failed=${summary.failed} stale_skipped=${summary.staleSkipped} pending_stage_a=${backlog.stageAPending} pending_stage_b=${backlog.stageBPending}`
+    );
 }
 
-async function ingestOutputLines(batchJob, contents) {
+async function ingestOutputLines(batchJob, contents, summary) {
     const lines = splitJsonl(contents);
 
     for (const line of lines) {
@@ -65,12 +81,14 @@ async function ingestOutputLines(batchJob, contents) {
         }
 
         if (!entry.response || entry.response.status_code !== 200) {
+            summary.failed += 1;
             await markSinglePostFailed(batchJob, postId, entry.response?.status_code ? `status_${entry.response.status_code}` : "request_failed");
             continue;
         }
 
         const labelConfig = STAGE_LABEL_MAP[stage].get(requestKey);
         if (!labelConfig) {
+            summary.failed += 1;
             await markSinglePostFailed(batchJob, postId, "unknown_request_key");
             continue;
         }
@@ -79,15 +97,22 @@ async function ingestOutputLines(batchJob, contents) {
         try {
             parsed = parseChatCompletionPayload(entry.response.body, labelConfig);
         } catch (error) {
+            summary.failed += 1;
             await markSinglePostFailed(batchJob, postId, "invalid_response");
             continue;
         }
 
-        await applySuccessfulLabel(batchJob, postId, labelConfig, parsed);
+        const result = await applySuccessfulLabel(batchJob, postId, labelConfig, parsed);
+        if (result === "stale") {
+            summary.staleSkipped += 1;
+            continue;
+        }
+
+        summary.succeeded += 1;
     }
 }
 
-async function ingestErrorLines(batchJob, contents) {
+async function ingestErrorLines(batchJob, contents, summary) {
     const lines = splitJsonl(contents);
 
     for (const line of lines) {
@@ -99,12 +124,13 @@ async function ingestErrorLines(batchJob, contents) {
         }
 
         const code = entry.error?.code || "request_failed";
+        summary.failed += 1;
         await markSinglePostFailed(batchJob, postId, code);
     }
 }
 
 async function applySuccessfulLabel(batchJob, postId, labelConfig, parsed) {
-    await db.withTransaction(async (tx) => {
+    return db.withTransaction(async (tx) => {
         const batchIdColumn = batchJob.stage === "A" ? "stage_a_batch_id" : "stage_b_batch_id";
         const statusColumn = batchJob.stage === "A" ? "stage_a_status" : "stage_b_status";
         const errorColumn = batchJob.stage === "A" ? "stage_a_last_error" : "stage_b_last_error";
@@ -120,7 +146,7 @@ async function applySuccessfulLabel(batchJob, postId, labelConfig, parsed) {
         const row = rows[0];
 
         if (!row || Number(row[batchIdColumn]) !== Number(batchJob.id) || row[statusColumn] !== "queued") {
-            return;
+            return "stale";
         }
 
         const mergedConfidence = {
@@ -191,6 +217,7 @@ async function applySuccessfulLabel(batchJob, postId, labelConfig, parsed) {
                 );
             }
         }
+        return "applied";
     });
 }
 
@@ -302,6 +329,23 @@ function serializeBatchError(batchJob) {
     return JSON.stringify(batchJob.errors || batchJob.last_error || {
         message: "Batch failed before output ingestion.",
     });
+}
+
+async function getBacklogCounts() {
+    const rows = await db.all(
+        `
+            SELECT
+                COUNT(*) FILTER (WHERE stage_a_status = 'pending')::int AS stage_a_pending,
+                COUNT(*) FILTER (WHERE stage_b_status = 'pending')::int AS stage_b_pending
+            FROM posts
+        `
+    );
+    const row = rows?.[0] || {};
+
+    return {
+        stageAPending: Number(row.stage_a_pending) || 0,
+        stageBPending: Number(row.stage_b_pending) || 0,
+    };
 }
 
 module.exports = {

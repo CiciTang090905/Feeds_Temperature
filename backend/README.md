@@ -92,8 +92,14 @@ Political metric keys include:
 ## Batch mode setup
 
 - Set `LABEL_BATCH_ENABLED=1` to enable the scheduler.
-- Batch mode uses the OpenAI Batch API, so set both `OPENAI_API_KEY` and `OPENAI_BATCH_MODEL`.
-- The sync/dev labeling path can still keep using the existing Azure env vars if that is what your local setup uses today.
+- `LABEL_BATCH_PROVIDER` may be:
+  - `auto` (default)
+  - `openai`
+  - `azure`
+- Batch mode supports either:
+  - OpenAI Platform with `OPENAI_API_KEY` and `OPENAI_BATCH_MODEL`
+  - Azure OpenAI with `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and a batch-capable deployment in `OPENAI_BATCH_MODEL` or `AZURE_OPENAI_DEPLOYMENT`
+- If Azure is used, the deployment must support batch jobs.
 - Batch scheduler intervals:
   - `LABEL_BATCH_SUBMITTER_INTERVAL_MS` default `600000`
   - `LABEL_BATCH_POLLER_INTERVAL_MS` default `60000`

@@ -1,44 +1,179 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Feeds_temperature Settings</title>
+    <title>Feeds_temperature Account</title>
     <style>
+        :root {
+            color-scheme: light;
+            --bg: #f4efe6;
+            --surface: #fffaf3;
+            --surface-strong: #ffffff;
+            --border: #d6c7b1;
+            --text: #2a241d;
+            --muted: #6f665b;
+            --accent: #b4472c;
+            --accent-dark: #8f331d;
+            --danger: #8d1b1b;
+        }
+
+        * { box-sizing: border-box; }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 680px;
+            margin: 0;
+            background:
+                radial-gradient(circle at top left, rgba(180, 71, 44, 0.12), transparent 30%),
+                linear-gradient(180deg, #f8f2e9 0%, var(--bg) 100%);
+            color: var(--text);
+            font: 16px/1.5 Georgia, "Times New Roman", serif;
+        }
+
+        .shell {
+            max-width: 780px;
             margin: 0 auto;
-            padding: 24px;
-            color: #17202a;
+            padding: 40px 20px 56px;
+        }
+
+        .hero {
+            margin-bottom: 24px;
         }
 
         h1 {
-            margin-top: 0;
+            margin: 0 0 8px;
+            font-size: 38px;
+            line-height: 1.1;
+        }
+
+        .subtle {
+            color: var(--muted);
+            margin: 0;
+            max-width: 56ch;
         }
 
         .card {
-            border: 1px solid #d9e1ea;
-            border-radius: 12px;
-            padding: 16px;
-            background: #ffffff;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 18px 40px rgba(42, 36, 29, 0.08);
         }
 
-        p {
-            line-height: 1.6;
+        .stack > * + * {
+            margin-top: 16px;
+        }
+
+        .field-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+
+        input, textarea {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            background: var(--surface-strong);
+            color: var(--text);
+            font: inherit;
+        }
+
+        textarea.code-box {
+            min-height: 120px;
+            font-family: "Courier New", monospace;
+            font-size: 15px;
+            letter-spacing: 0.04em;
+            resize: vertical;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        button, .link-button {
+            appearance: none;
+            border: 0;
+            border-radius: 999px;
+            padding: 12px 18px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 120ms ease, background 120ms ease;
+        }
+
+        button:hover, .link-button:hover {
+            transform: translateY(-1px);
+        }
+
+        .primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .primary:hover {
+            background: var(--accent-dark);
+        }
+
+        .secondary {
+            background: rgba(180, 71, 44, 0.08);
+            color: var(--accent-dark);
+        }
+
+        .danger {
+            background: rgba(141, 27, 27, 0.12);
+            color: var(--danger);
+        }
+
+        .link-button {
+            padding: 0;
+            background: transparent;
+            color: var(--accent-dark);
+            text-decoration: underline;
+        }
+
+        .inline {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .error {
+            color: var(--danger);
+            font-weight: 700;
+        }
+
+        .success {
+            color: #275d38;
+            font-weight: 700;
+        }
+
+        .small {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .hidden-token {
+            letter-spacing: 0.18em;
+        }
+
+        @media (max-width: 640px) {
+            h1 { font-size: 31px; }
+            .card { padding: 18px; }
         }
     </style>
 </head>
-
 <body>
-    <h1>Feeds_temperature</h1>
-    <div class="card">
-        <p>This extension currently captures visible X posts into <code>chrome.storage.local</code>.</p>
-        <p>Captured posts in local storage: <strong id="post-count">0</strong></p>
-        <p>Backend sync is not wired yet. This page is reserved for future capture and backend settings.</p>
+    <div class="shell">
+        <div class="hero">
+            <h1>Feeds_temperature account</h1>
+            <p class="subtle">Your access code stays on the backend side of this project. This page is only for signing in, creating an account, and managing the code that unlocks your own stats.</p>
+        </div>
+        <div id="app"></div>
     </div>
     <script src="options.js"></script>
 </body>
-
 </html>

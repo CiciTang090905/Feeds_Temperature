@@ -22,9 +22,14 @@ async function tick() {
             `
         );
 
+        console.log(`[batch poller] active_jobs=${jobs.length}`);
+
         for (const job of jobs) {
             const batch = await retrieveBatch(job.openai_batch_id);
             const nextStatus = batch.status || job.status;
+            console.log(
+                `[batch poller] local_batch_id=${job.id} remote_batch_id=${job.openai_batch_id} stage=${job.stage} status=${job.status} -> ${nextStatus}`
+            );
 
             await db.run(
                 `
@@ -49,6 +54,9 @@ async function tick() {
             );
 
             if (TERMINAL_STATUSES.has(nextStatus)) {
+                console.log(
+                    `[batch poller] ingesting terminal batch local_batch_id=${job.id} remote_batch_id=${job.openai_batch_id} stage=${job.stage} terminal_status=${nextStatus}`
+                );
                 await runIngester({
                     ...job,
                     errors: batch.errors,

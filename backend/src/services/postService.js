@@ -311,19 +311,19 @@ async function saveHanAndPoliticalLabels(id, labels = {}, confidence = {}) {
         `
             UPDATE posts
             SET han_label = $1,
-                is_political = $2,
+                is_political = $2::smallint,
                 label_confidence = $3,
                 label_skip_reason = NULL,
                 stage_a_status = 'done',
                 stage_a_batch_id = NULL,
                 stage_a_last_error = NULL,
                 stage_b_status = CASE
-                    WHEN $2 = 1 AND stage_b_status = 'n/a' THEN 'pending'
-                    WHEN $2 = 0 THEN 'n/a'
+                    WHEN $2::smallint = 1 AND stage_b_status = 'n/a' THEN 'pending'
+                    WHEN $2::smallint = 0 THEN 'n/a'
                     ELSE stage_b_status
                 END,
-                stage_b_batch_id = CASE WHEN $2 = 0 THEN NULL ELSE stage_b_batch_id END,
-                stage_b_last_error = CASE WHEN $2 = 0 THEN NULL ELSE stage_b_last_error END
+                stage_b_batch_id = CASE WHEN $2::smallint = 0 THEN NULL ELSE stage_b_batch_id END,
+                stage_b_last_error = CASE WHEN $2::smallint = 0 THEN NULL ELSE stage_b_last_error END
             WHERE id = $4
         `,
         [

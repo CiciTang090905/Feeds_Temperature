@@ -22,6 +22,7 @@ async function tick() {
 }
 
 async function submitStageA() {
+    const pendingCount = await countByStatus("stage_a_status", "pending");
     const posts = await db.all(
         `
             SELECT id, text, media, quoted_post
@@ -34,6 +35,7 @@ async function submitStageA() {
     );
 
     if (!posts.length) {
+        console.log(`[batch submitter] stage=A no pending posts (remaining=${pendingCount})`);
         return;
     }
 
@@ -41,6 +43,8 @@ async function submitStageA() {
     const requestCount = validateJsonl(jsonl);
     const inputFileId = await uploadBatchFile(jsonl);
     const batch = await createBatch(inputFileId, getBatchRequestUrl());
+
+    let batchJobId = null;
 
     await db.withTransaction(async (tx) => {
         const inserted = await tx.all(
@@ -56,7 +60,7 @@ async function submitStageA() {
             `,
             ["A", batch.id, inputFileId, batch.status || "validating", requestCount]
         );
-        const batchJobId = Number(inserted[0].id);
+        batchJobId = Number(inserted[0].id);
         const postIds = posts.map((post) => Number(post.id));
 
         await tx.query(
@@ -72,10 +76,14 @@ async function submitStageA() {
         );
     });
 
-    console.log(`Submitted Stage A batch ${batch.id} for ${posts.length} posts (${requestCount} requests).`);
+    const remainingAfterQueue = await countByStatus("stage_a_status", "pending");
+    console.log(
+        `[batch submitter] created stage=A local_batch_id=${batchJobId} remote_batch_id=${batch.id} posts=${posts.length} requests=${requestCount} pending_before=${pendingCount} pending_after=${remainingAfterQueue}`
+    );
 }
 
 async function submitStageB() {
+    const pendingCount = await countByStatus("stage_b_status", "pending");
     const posts = await db.all(
         `
             SELECT id, text, media, quoted_post
@@ -89,6 +97,7 @@ async function submitStageB() {
     );
 
     if (!posts.length) {
+        console.log(`[batch submitter] stage=B no pending posts (remaining=${pendingCount})`);
         return;
     }
 
@@ -96,6 +105,8 @@ async function submitStageB() {
     const requestCount = validateJsonl(jsonl);
     const inputFileId = await uploadBatchFile(jsonl);
     const batch = await createBatch(inputFileId, getBatchRequestUrl());
+
+    let batchJobId = null;
 
     await db.withTransaction(async (tx) => {
         const inserted = await tx.all(
@@ -111,7 +122,7 @@ async function submitStageB() {
             `,
             ["B", batch.id, inputFileId, batch.status || "validating", requestCount]
         );
-        const batchJobId = Number(inserted[0].id);
+        batchJobId = Number(inserted[0].id);
         const postIds = posts.map((post) => Number(post.id));
 
         await tx.query(
@@ -128,7 +139,10 @@ async function submitStageB() {
         );
     });
 
-    console.log(`Submitted Stage B batch ${batch.id} for ${posts.length} posts (${requestCount} requests).`);
+    const remainingAfterQueue = await countByStatus("stage_b_status", "pending");
+    console.log(
+        `[batch submitter] created stage=B local_batch_id=${batchJobId} remote_batch_id=${batch.id} posts=${posts.length} requests=${requestCount} pending_before=${pendingCount} pending_after=${remainingAfterQueue}`
+    );
 }
 
 function validateJsonl(jsonlString) {
@@ -152,7 +166,21 @@ function validateJsonl(jsonlString) {
     return lines.length;
 }
 
+async function countByStatus(column, status) {
+    const rows = await db.all(
+        `
+            SELECT COUNT(*)::int AS count
+            FROM posts
+            WHERE ${column} = $1
+        `,
+        [status]
+    );
+
+    return Number(rows?.[0]?.count) || 0;
+}
+
 module.exports = {
+    countByStatus,
     tick,
     validateJsonl,
 };

@@ -1,4 +1,5 @@
-const { buildPassARequests, buildPassBRequests } = require("../jsonlBuilder");
+const { buildBatchPrompt, buildPassARequests, buildPassBRequests } = require("../jsonlBuilder");
+const { EXTRA_LABELS, HAN_STAGE_A_LABEL, POLITICAL_STAGE_A_LABEL } = require("../../shared/catalog");
 
 describe("jsonlBuilder", () => {
     const samplePost = {
@@ -17,6 +18,21 @@ describe("jsonlBuilder", () => {
         expect(first.custom_id).toBe("p42-sA-han");
         expect(second.custom_id).toBe("p42-sA-political");
         expect(first.body.messages[1].content[1].image_url.url).toBe("https://example.com/image.jpg");
+    });
+
+    test("buildBatchPrompt separates han, political, and sublabel prompts", () => {
+        const hanPrompt = buildBatchPrompt(samplePost, HAN_STAGE_A_LABEL);
+        const politicalPrompt = buildBatchPrompt(samplePost, POLITICAL_STAGE_A_LABEL);
+        const sublabelPrompt = buildBatchPrompt(samplePost, EXTRA_LABELS[0]);
+
+        expect(hanPrompt).toContain("high-arousal negative emotion");
+        expect(hanPrompt).toContain("highly_aroused_negativity");
+
+        expect(politicalPrompt).toContain("political content");
+        expect(politicalPrompt).toContain("is_political");
+
+        expect(sublabelPrompt).toContain("partisan animosity");
+        expect(sublabelPrompt).toContain("partisan_animosity");
     });
 
     test("buildPassBRequests emits eight requests per post", () => {

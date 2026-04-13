@@ -1,6 +1,6 @@
 # Feeds Temperature
 
-Chrome extension + local backend for collecting visible X/Twitter posts, uploading them to SQLite, and labeling political-emotion metrics.
+Chrome extension + backend for collecting visible X/Twitter posts, uploading them to managed Postgres, and labeling political-emotion metrics.
 
 ## What it does
 
@@ -8,11 +8,14 @@ Chrome extension + local backend for collecting visible X/Twitter posts, uploadi
 - Stores captured posts locally first in `chrome.storage.local` (`captured_posts`).
 - Uploads local backlog from the background worker to backend in batches.
 - Retries upload every 5 seconds if backend is unavailable.
-- Stores posts in SQLite (`backend/data/feeds-temperature.db`) with dedupe on `platform + tweet_id`.
-- Runs an auto-label worker:
-  - first pass per post: HAN + `is_political`
-  - second pass only when political: 8 political/social labels (partisan animosity, social distrust, etc.)
-  - multimodal support: image/video-thumbnail URL is sent when available (text-first evidence policy)
+- Stores posts in Postgres via `DATABASE_URL` with dedupe on `user_id + platform + tweet_id`.
+- Uses a pseudonymous access code stored in `chrome.storage.local` to locate each user's own data.
+- Runs labeling in either sync or batch mode:
+  - sync worker for local/dev fallback
+  - batch scheduler for shared environments when `LABEL_BATCH_ENABLED=1`
+  - stage A submits 2 requests per post: HAN and `is_political`
+  - stage B submits 8 requests per political post: one request per sublabel
+  - multimodal support: image/video-thumbnail URL is sent when available
 - Shows an in-page stats panel on X:
   - draggable
   - minimize/expand toggle
@@ -26,37 +29,50 @@ Chrome extension + local backend for collecting visible X/Twitter posts, uploadi
 
 1. Content script captures visible posts and writes them to local extension storage.
 2. Background script syncs `captured_posts` to backend via `POST /api/posts/batch`.
-3. Backend saves rows in SQLite.
-4. Label worker polls unlabeled rows and labels per post:
-   - pass A: HAN + is_political
-   - pass B (conditional): 8 political sublabels when `is_political = 1`
+3. Backend saves rows in Postgres.
+4. Labeling pipeline picks up unlabeled rows:
+   - stage A: HAN + is_political
+   - stage B (conditional): 8 political sublabels when `is_political = 1`
 5. Content script fetches `GET /api/posts/stats` and renders percentages in the panel.
 
 ## API endpoints used
 
 - `GET http://localhost:3001/health`
+- `POST http://localhost:3001/api/users/register`
+- `POST http://localhost:3001/api/users/login`
+- `PATCH http://localhost:3001/api/users/me`
 - `POST http://localhost:3001/api/posts/batch`
 - `GET http://localhost:3001/api/posts`
 - `GET http://localhost:3001/api/posts/stats`
 
-## Local setup
+## Local developer setup
 
 1. Install backend dependencies:
 ```bash
 cd backend
 npm install
 ```
-2. Create `backend/.env` and set:
+2. Create `backend/.env.local` and set:
 ```bash
 PORT=3001
 LABEL_POLL_INTERVAL_MS=10000
+LABEL_BATCH_ENABLED=0
+LABEL_BATCH_PROVIDER=auto
+LABEL_BATCH_SUBMITTER_INTERVAL_MS=600000
+LABEL_BATCH_POLLER_INTERVAL_MS=60000
+DATABASE_URL=postgres://USER:PASSWORD@HOST/DBNAME?sslmode=require
+OPENAI_API_KEY=...
+OPENAI_BATCH_MODEL=...
 AZURE_OPENAI_ENDPOINT=...
 AZURE_OPENAI_KEY=...
 AZURE_OPENAI_DEPLOYMENT=...
 AZURE_OPENAI_API_VERSION=2024-10-21
 ```
+   For a future cloud machine, use `backend/.env` instead of `backend/.env.local`.
+   If you want a custom location, set `ENV_FILE=/absolute/path/to/your.env`.
 3. Start backend:
 ```bash
+npm run db:migrate
 npm run dev
 ```
 4. Load extension in Chrome:
@@ -64,18 +80,36 @@ npm run dev
 - enable Developer Mode
 - choose "Load unpacked" and select project root
 
+End users do not need to set up env files or handle API keys. Those stay on the backend machine only.
+
 ## Backend scripts
 
 Run from `backend/`:
 
 - `npm run dev` -> start backend with auto-reload and label worker
 - `npm run start` -> start backend
+- `npm run db:migrate` -> run pending Postgres migrations
+- `npm run db:rollback` -> roll back one Postgres migration
+- `npm run db:migrate:create -- <name>` -> create a new migration stub
+- `npm run db:copy:sqlite` -> copy rows from `backend/data/feeds-temperature.db` into Postgres
+- `npm run batch:submit-now` -> run one batch submitter tick
+- `npm run batch:poll-now` -> run one batch poller tick
+- `npm run batch:status` -> show active batch jobs
 - `npm run label:one -- --text "<post text>"` -> test one input text
 - `npm run label:one -- <db_id>` -> label one DB row by id
 - `npm run label:all` -> one-shot labeling pass
 - `npm run label:watch` -> continuous labeling loop
 - `npm run labels:show` -> print latest labels
 - `npm run label:eval15` -> sample 15 labeled posts, re-label, and print agreement report
+
+## Batch deployment note
+
+- Batch mode can use either:
+  - OpenAI Platform with `OPENAI_API_KEY` and `OPENAI_BATCH_MODEL`
+  - Azure OpenAI with `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and a batch-capable deployment in `OPENAI_BATCH_MODEL` or `AZURE_OPENAI_DEPLOYMENT`
+- Use `LABEL_BATCH_PROVIDER=azure` if both OpenAI and Azure variables exist but you want the batch pipeline to force Azure.
+- If you use Azure for batch mode, make sure the deployment supports batch jobs.
+- Only the backend machine should have these env files. The extension/frontend should never contain API keys.
 
 ## Captured post fields
 
