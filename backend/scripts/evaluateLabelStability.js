@@ -9,6 +9,7 @@ const { classifyHanAndPolitical, classifyPoliticalSublabels } = require("../src/
 
 const DEFAULT_SAMPLE_SIZE = 15;
 const DEFAULT_RUN_COUNT = 10;
+const MAX_REQUEST_ATTEMPTS = 3;
 const TEMP_DIR = path.resolve(__dirname, "../tmp");
 const TEMP_REPORT_PATH = path.join(TEMP_DIR, "label-stability-latest.txt");
 const SUBLABEL_COLUMNS = EXTRA_LABELS.map((label) => label.column);
@@ -47,6 +48,7 @@ async function main() {
             logger.log(
                 `  post:${post.id} han:${result.labels.han_label} political:${result.labels.is_political}`
                 + (result.labels.is_political === 1 ? " sublabels:labeled" : " sublabels:skipped")
+                + ` mode:${result.imageMode}`
             );
         }
 
@@ -94,8 +96,8 @@ async function getSampledPosts(limit) {
 }
 
 async function relabelPost(post) {
-    const imageUrl = extractImageContextUrl(post.media);
-    const firstPass = await classifyHanAndPolitical(post.text || "", imageUrl, post.quotedPost || null);
+    const preferredImageUrl = extractImageContextUrl(post.media);
+    const firstPass = await classifyFirstPassWithFallback(post, preferredImageUrl);
 
     const labels = {
         han_label: firstPass.labels.han_label,
@@ -103,7 +105,7 @@ async function relabelPost(post) {
     };
 
     if (firstPass.labels.is_political === 1) {
-        const secondPass = await classifyPoliticalSublabels(post.text || "", imageUrl, post.quotedPost || null);
+        const secondPass = await classifyPoliticalWithFallback(post, firstPass.imageUrl);
         for (const column of SUBLABEL_COLUMNS) {
             labels[column] = secondPass.labels[column];
         }
@@ -116,7 +118,68 @@ async function relabelPost(post) {
     return {
         postId: post.id,
         labels,
+        imageMode: firstPass.imageUrl ? "image" : "text-only",
     };
+}
+
+async function classifyFirstPassWithFallback(post, imageUrl) {
+    try {
+        const result = await withRetry(() => classifyHanAndPolitical(post.text || "", imageUrl, post.quotedPost || null));
+        return {
+            ...result,
+            imageUrl,
+        };
+    } catch (error) {
+        if (!imageUrl || !isImageDownloadTimeoutError(error)) {
+            throw error;
+        }
+
+        const fallback = await withRetry(() => classifyHanAndPolitical(post.text || "", null, post.quotedPost || null));
+        return {
+            ...fallback,
+            imageUrl: null,
+        };
+    }
+}
+
+async function classifyPoliticalWithFallback(post, imageUrl) {
+    try {
+        return await withRetry(() => classifyPoliticalSublabels(post.text || "", imageUrl, post.quotedPost || null));
+    } catch (error) {
+        if (!imageUrl || !isImageDownloadTimeoutError(error)) {
+            throw error;
+        }
+
+        return withRetry(() => classifyPoliticalSublabels(post.text || "", null, post.quotedPost || null));
+    }
+}
+
+async function withRetry(fn) {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= MAX_REQUEST_ATTEMPTS; attempt += 1) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            if (!isRetriableAzureError(error) || attempt === MAX_REQUEST_ATTEMPTS) {
+                break;
+            }
+        }
+    }
+
+    throw lastError;
+}
+
+function isRetriableAzureError(error) {
+    const message = String(error?.message || "");
+    return /Azure OpenAI request failed: 5\d\d/.test(message)
+        || /connection timeout/i.test(message)
+        || /Timed out while downloading image/i.test(message);
+}
+
+function isImageDownloadTimeoutError(error) {
+    return /Timed out while downloading image/i.test(String(error?.message || ""));
 }
 
 function extractImageContextUrl(media) {
