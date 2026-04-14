@@ -1,7 +1,7 @@
 const USER_SESSION_KEY = "user_session";
-const USERS_LOGIN_URL = "http://localhost:3001/api/users/login";
-const USERS_REGISTER_URL = "http://localhost:3001/api/users/register";
-const USERS_ME_URL = "http://localhost:3001/api/users/me";
+const USERS_LOGIN_URL = "http://34.207.146.239:3001/api/users/login";
+const USERS_REGISTER_URL = "http://34.207.146.239:3001/api/users/register";
+const USERS_ME_URL = "http://34.207.146.239:3001/api/users/me";
 const TOKEN_REGEX = /^[0-9a-f]{64}$/;
 
 const app = document.getElementById("app");

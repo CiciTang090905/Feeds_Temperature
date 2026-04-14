@@ -50,6 +50,6 @@ main()
     .then(() => closeDatabase())
     .catch(async (error) => {
         console.error("labelOnePost failed:", error.message);
-        await closeDatabase().catch(() => {});
+        await closeDatabase().catch(() => { });
         process.exit(1);
     });

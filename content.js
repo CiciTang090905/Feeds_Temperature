@@ -1,5 +1,5 @@
 const CAPTURE_STORAGE_KEY = "captured_posts";
-const BACKEND_STATS_URL = "http://localhost:3001/api/posts/stats";
+const BACKEND_STATS_URL = "http://34.207.146.239:3001/api/posts/stats";
 const STATS_PANEL_ID = "feeds-temperature-stats-panel";
 const STATS_PANEL_HEADER_ID = "feeds-temperature-stats-panel-header";
 const STATS_PANEL_BODY_ID = "feeds-temperature-stats-panel-body";
@@ -517,7 +517,7 @@ async function refreshStatsPanel() {
         const stats = await response.json();
         renderStatsPanelBody(panelBody, stats);
     } catch (error) {
-        panelBody.textContent = "Stats unavailable. Start backend server on localhost:3001.";
+        panelBody.textContent = "Stats unavailable. Check whether the hosted backend is reachable.";
     }
 }
 
@@ -613,6 +613,16 @@ function startPostCapture() {
     startStatsPanel();
     console.log("Starting X post capture");
 }
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request?.type === "REFRESH_STATS_PANEL") {
+        refreshStatsPanel().catch(() => {});
+        sendResponse?.({ ok: true });
+        return true;
+    }
+
+    return false;
+});
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", startPostCapture, { once: true });

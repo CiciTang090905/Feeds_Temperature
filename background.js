@@ -2,8 +2,8 @@ const CAPTURE_STORAGE_KEY = "captured_posts";
 const CAPTURE_STATS_KEY = "capture_stats";
 const SYNC_STATUS_KEY = "capture_sync_status";
 const USER_SESSION_KEY = "user_session";
-const BACKEND_BATCH_URL = "http://localhost:3001/api/posts/batch";
-const BACKEND_POSTS_URL = "http://localhost:3001/api/posts";
+const BACKEND_BATCH_URL = "http://34.207.146.239:3001/api/posts/batch";
+const BACKEND_POSTS_URL = "http://34.207.146.239:3001/api/posts";
 const MAX_BATCH_SIZE = 15;
 const SYNC_RETRY_INTERVAL_MS = 5000;
 
@@ -174,6 +174,13 @@ async function syncCapturedPosts() {
             totalUploadedCount,
         });
 
+        if (ackedIds.size > 0) {
+            scheduleStatsRefreshes({
+                reason: "sync_complete",
+                syncedCount: ackedIds.size,
+            });
+        }
+
         if (remainingPosts.length > 0) {
             scheduleRetry();
         } else {
@@ -308,6 +315,30 @@ function buildAuthHeaders(token) {
     return {
         Authorization: `Bearer ${token}`,
     };
+}
+
+function broadcastStatsRefresh(payload = {}) {
+    chrome.runtime.sendMessage({
+        type: "REFRESH_STATS_PANEL",
+        payload,
+    }, () => {
+        if (chrome.runtime.lastError) {
+            // No active listeners is fine.
+        }
+    });
+}
+
+function scheduleStatsRefreshes(payload = {}) {
+    const delays = [0, 2000, 5000];
+
+    for (const delayMs of delays) {
+        setTimeout(() => {
+            broadcastStatsRefresh({
+                ...payload,
+                delayMs,
+            });
+        }, delayMs);
+    }
 }
 
 async function handleUnauthorized() {
