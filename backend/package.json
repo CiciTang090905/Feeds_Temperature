@@ -19,6 +19,7 @@
     "label:watch": "node scripts/labelUnlabeledPosts.js --watch",
     "labels:show": "node scripts/showLatestLabels.js",
     "label:eval15": "node scripts/evaluateLabelAgreement.js 15",
+    "label:stability": "node scripts/evaluateLabelStability.js",
     "db:copy:sqlite": "node scripts/migrate-sqlite-to-postgres.js"
   },
   "dependencies": {
