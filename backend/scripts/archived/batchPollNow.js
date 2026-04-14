@@ -1,6 +1,6 @@
-require("../src/config/loadEnv");
+require("../../src/config/loadEnv");
 
-const { tick } = require("../src/labeling/batch/poller");
+const { tick } = require("../../src/labeling/batch_archived/poller");
 
 tick()
     .then(() => {

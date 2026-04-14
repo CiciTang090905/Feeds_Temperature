@@ -1,7 +1,6 @@
 require("./config/loadEnv");
 
 const app = require("./app");
-const { start: startBatchScheduler } = require("./labeling/batch/scheduler");
 const { startLabelWorker } = require("./labeling/sync/labelWorker");
 const { closeDatabase, initializeDatabase } = require("./db/database");
 
@@ -10,13 +9,8 @@ let server = null;
 
 async function startServer() {
     await initializeDatabase();
-    if (process.env.LABEL_BATCH_ENABLED === "1") {
-        console.log("Starting backend in batch labeling mode.");
-        startBatchScheduler();
-    } else {
-        console.log("Starting backend in sync labeling mode.");
-        startLabelWorker();
-    }
+    console.log("Starting backend in sync labeling mode.");
+    startLabelWorker();
 
     server = app.listen(port, () => {
         console.log(`Backend listening on http://localhost:${port}`);

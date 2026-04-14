@@ -1,11 +1,11 @@
-require("../src/config/loadEnv");
+require("../../src/config/loadEnv");
 
-const db = require("../src/db/database");
+const db = require("../../src/db/database");
 
 async function main() {
     const batchRef = String(process.argv[2] || "").trim();
     if (!batchRef) {
-        throw new Error("Provide a batch id or remote batch id. Example: npm run batch:inspect -- 12");
+        throw new Error("Provide a batch id or remote batch id. Example: npm run archived:batch:inspect -- 12");
     }
 
     await db.initializeDatabase();

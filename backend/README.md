@@ -62,12 +62,12 @@ Political metric keys include:
 - Deduplication: `UNIQUE(user_id, platform, tweet_id)` on `posts`
 - `author`, `media`, `quoted_post`, and `label_confidence` are stored as Postgres `JSONB`
 - Posts are scoped to a `users` row and identified by a bearer access code hashed in the backend.
-- Labeling can run in two modes:
-  - sync worker when `LABEL_BATCH_ENABLED=0`
-  - OpenAI Batch scheduler when `LABEL_BATCH_ENABLED=1`
-- Batch mode uses 2 stages:
-  - stage A submits 2 requests per post: `han_label`, `is_political`
-  - stage B submits 8 requests per political post: one request per sublabel
+- Real-time sync labeling is the active path again.
+- The old batch implementation is archived under `backend/src/labeling/batch_archived/` for future reference.
+- Prompt separation is preserved:
+  - HAN prompt
+  - political prompt
+  - 8 individual sublabel prompts
 - Internal metadata:
   - confidence and audit fields are stored in `label_confidence`
   - includes image usage flags from model outputs (`image_used_*`)
@@ -80,29 +80,20 @@ Political metric keys include:
 - `npm run db:rollback` -> roll back one Postgres migration
 - `npm run db:migrate:create -- <name>` -> create a new migration stub
 - `npm run db:copy:sqlite` -> copy rows from local SQLite into Postgres
-- `npm run batch:submit-now` -> run one batch submitter tick
-- `npm run batch:poll-now` -> run one batch poller tick
-- `npm run batch:status` -> print active batch jobs
+- `npm run archived:batch:submit-now` -> archived batch submitter helper
+- `npm run archived:batch:poll-now` -> archived batch poller helper
+- `npm run archived:batch:status` -> archived batch status helper
+- `npm run archived:batch:inspect -- <id>` -> inspect one archived batch job
 - `npm run label:one` -> label one text or one DB row
 - `npm run label:all` -> one-pass labeling
 - `npm run label:watch` -> continuous labeling loop
 - `npm run labels:show` -> print latest labels
 - `npm run label:eval15` -> evaluate label agreement on random 15 labeled posts
 
-## Batch mode setup
+## Archived Batch Notes
 
-- Set `LABEL_BATCH_ENABLED=1` to enable the scheduler.
-- `LABEL_BATCH_PROVIDER` may be:
-  - `auto` (default)
-  - `openai`
-  - `azure`
-- Batch mode supports either:
-  - OpenAI Platform with `OPENAI_API_KEY` and `OPENAI_BATCH_MODEL`
-  - Azure OpenAI with `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and a batch-capable deployment in `OPENAI_BATCH_MODEL` or `AZURE_OPENAI_DEPLOYMENT`
-- If Azure is used, the deployment must support batch jobs.
-- Batch scheduler intervals:
-  - `LABEL_BATCH_SUBMITTER_INTERVAL_MS` default `600000`
-  - `LABEL_BATCH_POLLER_INTERVAL_MS` default `60000`
+- Batch code is archived and not used by the active backend runtime.
+- If you revisit it later, the archived scripts and modules still exist for reference.
 
 ## Secret handling
 

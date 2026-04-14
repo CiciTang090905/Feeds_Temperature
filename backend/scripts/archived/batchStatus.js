@@ -1,6 +1,6 @@
-require("../src/config/loadEnv");
+require("../../src/config/loadEnv");
 
-const db = require("../src/db/database");
+const db = require("../../src/db/database");
 
 async function main() {
     await db.initializeDatabase();

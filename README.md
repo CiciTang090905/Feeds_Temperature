@@ -10,12 +10,12 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 - Retries upload every 5 seconds if backend is unavailable.
 - Stores posts in Postgres via `DATABASE_URL` with dedupe on `user_id + platform + tweet_id`.
 - Uses a pseudonymous access code stored in `chrome.storage.local` to locate each user's own data.
-- Runs labeling in either sync or batch mode:
-  - sync worker for local/dev fallback
-  - batch scheduler for shared environments when `LABEL_BATCH_ENABLED=1`
-  - stage A submits 2 requests per post: HAN and `is_political`
-  - stage B submits 8 requests per political post: one request per sublabel
-  - multimodal support: image/video-thumbnail URL is sent when available
+- Runs real-time sync labeling in the backend worker.
+- Prompt structure is still separated for clarity:
+  - HAN
+  - political
+  - 8 individual sublabels
+- The previous batch implementation is archived in the repo for future reference.
 - Shows an in-page stats panel on X:
   - draggable
   - minimize/expand toggle
@@ -30,9 +30,9 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 1. Content script captures visible posts and writes them to local extension storage.
 2. Background script syncs `captured_posts` to backend via `POST /api/posts/batch`.
 3. Backend saves rows in Postgres.
-4. Labeling pipeline picks up unlabeled rows:
-   - stage A: HAN + is_political
-   - stage B (conditional): 8 political sublabels when `is_political = 1`
+4. Sync label worker picks up unlabeled rows:
+   - first pass: HAN + is_political
+   - second pass (conditional): 8 political sublabels when `is_political = 1`
 5. Content script fetches `GET /api/posts/stats` and renders percentages in the panel.
 
 ## API endpoints used
@@ -56,13 +56,8 @@ npm install
 ```bash
 PORT=3001
 LABEL_POLL_INTERVAL_MS=10000
-LABEL_BATCH_ENABLED=0
-LABEL_BATCH_PROVIDER=auto
-LABEL_BATCH_SUBMITTER_INTERVAL_MS=600000
-LABEL_BATCH_POLLER_INTERVAL_MS=60000
 DATABASE_URL=postgres://USER:PASSWORD@HOST/DBNAME?sslmode=require
 OPENAI_API_KEY=...
-OPENAI_BATCH_MODEL=...
 AZURE_OPENAI_ENDPOINT=...
 AZURE_OPENAI_KEY=...
 AZURE_OPENAI_DEPLOYMENT=...
@@ -92,9 +87,10 @@ Run from `backend/`:
 - `npm run db:rollback` -> roll back one Postgres migration
 - `npm run db:migrate:create -- <name>` -> create a new migration stub
 - `npm run db:copy:sqlite` -> copy rows from `backend/data/feeds-temperature.db` into Postgres
-- `npm run batch:submit-now` -> run one batch submitter tick
-- `npm run batch:poll-now` -> run one batch poller tick
-- `npm run batch:status` -> show active batch jobs
+- `npm run archived:batch:submit-now` -> archived batch submitter helper
+- `npm run archived:batch:poll-now` -> archived batch poller helper
+- `npm run archived:batch:status` -> archived batch status helper
+- `npm run archived:batch:inspect -- <id>` -> inspect one archived batch job
 - `npm run label:one -- --text "<post text>"` -> test one input text
 - `npm run label:one -- <db_id>` -> label one DB row by id
 - `npm run label:all` -> one-shot labeling pass
@@ -102,13 +98,9 @@ Run from `backend/`:
 - `npm run labels:show` -> print latest labels
 - `npm run label:eval15` -> sample 15 labeled posts, re-label, and print agreement report
 
-## Batch deployment note
+## Archived Batch Note
 
-- Batch mode can use either:
-  - OpenAI Platform with `OPENAI_API_KEY` and `OPENAI_BATCH_MODEL`
-  - Azure OpenAI with `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and a batch-capable deployment in `OPENAI_BATCH_MODEL` or `AZURE_OPENAI_DEPLOYMENT`
-- Use `LABEL_BATCH_PROVIDER=azure` if both OpenAI and Azure variables exist but you want the batch pipeline to force Azure.
-- If you use Azure for batch mode, make sure the deployment supports batch jobs.
+- The old batch pipeline is archived, not active.
 - Only the backend machine should have these env files. The extension/frontend should never contain API keys.
 
 ## Captured post fields
