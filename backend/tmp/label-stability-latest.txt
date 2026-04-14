@@ -1,0 +1,239 @@
+=== Label Stability Evaluation ===
+Sample size: 10
+Run count: 10
+Sampled post IDs: 315, 179, 328, 300, 211, 98, 166, 72, 275, 188
+
+Run 1/10 order: 328, 166, 188, 275, 315, 179, 98, 72, 300, 211
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:188 han:0 political:1 sublabels:labeled mode:image
+  post:275 han:1 political:1 sublabels:labeled mode:image
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:211 han:0 political:0 sublabels:skipped mode:image
+Run 2/10 order: 98, 300, 328, 72, 166, 179, 211, 315, 188, 275
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:211 han:0 political:0 sublabels:skipped mode:image
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:188 han:0 political:1 sublabels:labeled mode:image
+  post:275 han:1 political:1 sublabels:labeled mode:image
+Run 3/10 order: 98, 275, 315, 300, 179, 188, 166, 72, 211, 328
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:275 han:1 political:1 sublabels:labeled mode:image
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:188 han:0 political:1 sublabels:labeled mode:image
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:211 han:0 political:0 sublabels:skipped mode:image
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+Run 4/10 order: 211, 275, 315, 188, 179, 300, 72, 98, 166, 328
+  post:211 han:0 political:0 sublabels:skipped mode:image
+  post:275 han:1 political:1 sublabels:labeled mode:image
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:188 han:0 political:1 sublabels:labeled mode:image
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+Run 5/10 order: 211, 98, 179, 188, 72, 166, 315, 300, 328, 275
+  post:211 han:0 political:0 sublabels:skipped mode:image
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:188 han:0 political:1 sublabels:labeled mode:image
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+  post:275 han:1 political:1 sublabels:labeled mode:image
+Run 6/10 order: 166, 315, 211, 179, 328, 300, 275, 72, 188, 98
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:211 han:0 political:0 sublabels:skipped mode:image
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:275 han:1 political:1 sublabels:labeled mode:image
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:188 han:0 political:1 sublabels:labeled mode:image
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+Run 7/10 order: 275, 328, 98, 72, 300, 315, 179, 166, 211, 188
+  post:275 han:1 political:1 sublabels:labeled mode:image
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:211 han:0 political:0 sublabels:skipped mode:image
+  post:188 han:0 political:1 sublabels:labeled mode:image
+Run 8/10 order: 98, 315, 300, 179, 275, 328, 188, 72, 166, 211
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:275 han:1 political:1 sublabels:labeled mode:image
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+  post:188 han:0 political:1 sublabels:labeled mode:image
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:211 han:0 political:0 sublabels:skipped mode:image
+Run 9/10 order: 179, 315, 328, 300, 275, 211, 98, 188, 166, 72
+  post:179 han:0 political:0 sublabels:skipped mode:image
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:275 han:1 political:1 sublabels:labeled mode:image
+  post:211 han:0 political:0 sublabels:skipped mode:image
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:188 han:0 political:1 sublabels:labeled mode:image
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+Run 10/10 order: 328, 166, 98, 211, 72, 300, 179, 315, 275, 188
+  post:328 han:1 political:1 sublabels:labeled mode:text-only
+  post:166 han:0 political:0 sublabels:skipped mode:image
+  post:98 han:0 political:0 sublabels:skipped mode:text-only
+  post:211 han:0 political:0 sublabels:skipped mode:image
+  post:72 han:0 political:0 sublabels:skipped mode:text-only
+  post:300 han:1 political:1 sublabels:labeled mode:image
+  post:179 han:0 political:0 sublabels:skipped mode:text-only
+  post:315 han:1 political:1 sublabels:labeled mode:text-only
+  post:275 han:1 political:1 sublabels:labeled mode:image
+  post:188 han:0 political:1 sublabels:labeled mode:image
+
+=== Overall Agreement By Label ===
+- han_label: avg_agreement=100% unanimous_posts=10/10
+- is_political: avg_agreement=100% unanimous_posts=10/10
+- partisan_animosity: avg_agreement=100% unanimous_posts=10/10
+- support_undemocratic_practices: avg_agreement=100% unanimous_posts=10/10
+- support_partisan_violence: avg_agreement=100% unanimous_posts=10/10
+- support_undemocratic_candidates: avg_agreement=100% unanimous_posts=10/10
+- opposition_bipartisan_cooperation: avg_agreement=100% unanimous_posts=10/10
+- social_distrust: avg_agreement=95% unanimous_posts=8/10
+- social_distance: avg_agreement=97% unanimous_posts=8/10
+- biased_evaluation_politicized_facts: avg_agreement=95% unanimous_posts=8/10
+
+=== Per-Post Breakdown ===
+post_id:315 x:2044037532657070478
+  - han_label: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - is_political: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - partisan_animosity: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_undemocratic_practices: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_partisan_violence: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_undemocratic_candidates: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - social_distrust: agreement=60% dominant=1 values=[1, 0, 0, 1, 1, 1, 0, 0, 1, 1] counts={1:6, 0:4}
+  - social_distance: agreement=80% dominant=1 values=[1, 1, 0, 1, 1, 1, 0, 1, 1, 1] counts={1:8, 0:2}
+  - biased_evaluation_politicized_facts: agreement=90% dominant=1 values=[1, 0, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:9, 0:1}
+post_id:179 x:2043717448789303725
+  - han_label: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - is_political: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - partisan_animosity: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_practices: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_partisan_violence: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_candidates: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distrust: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distance: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - biased_evaluation_politicized_facts: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+post_id:328 x:2043494777144971388
+  - han_label: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - is_political: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - partisan_animosity: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_undemocratic_practices: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_partisan_violence: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_undemocratic_candidates: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - social_distrust: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - social_distance: agreement=90% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 0, 1] counts={1:9, 0:1}
+  - biased_evaluation_politicized_facts: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+post_id:300 x:2043758910469963991
+  - han_label: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - is_political: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - partisan_animosity: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - support_undemocratic_practices: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_partisan_violence: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_undemocratic_candidates: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - social_distrust: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - social_distance: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - biased_evaluation_politicized_facts: agreement=60% dominant=1 values=[1, 0, 1, 1, 1, 0, 1, 1, 0, 0] counts={1:6, 0:4}
+post_id:211 x:2043736136636317697
+  - han_label: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - is_political: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - partisan_animosity: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_practices: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_partisan_violence: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_candidates: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distrust: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distance: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - biased_evaluation_politicized_facts: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+post_id:98 x:2043284845762400575
+  - han_label: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - is_political: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - partisan_animosity: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_practices: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_partisan_violence: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_candidates: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distrust: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distance: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - biased_evaluation_politicized_facts: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+post_id:166 x:2043563458848059839
+  - han_label: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - is_political: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - partisan_animosity: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_practices: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_partisan_violence: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_candidates: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distrust: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distance: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - biased_evaluation_politicized_facts: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+post_id:72 x:2043383088248713541
+  - han_label: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - is_political: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - partisan_animosity: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_practices: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_partisan_violence: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - support_undemocratic_candidates: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distrust: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - social_distance: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+  - biased_evaluation_politicized_facts: agreement=100% dominant=null values=[null, null, null, null, null, null, null, null, null, null] counts={null:10}
+post_id:275 x:2043680433884307811
+  - han_label: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - is_political: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - partisan_animosity: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - support_undemocratic_practices: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_partisan_violence: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_undemocratic_candidates: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - social_distrust: agreement=90% dominant=0 values=[0, 1, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:9, 1:1}
+  - social_distance: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - biased_evaluation_politicized_facts: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+post_id:188 x:2043671005718061463
+  - han_label: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - is_political: agreement=100% dominant=1 values=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1] counts={1:10}
+  - partisan_animosity: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_undemocratic_practices: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_partisan_violence: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - support_undemocratic_candidates: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - opposition_bipartisan_cooperation: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - social_distrust: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - social_distance: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
+  - biased_evaluation_politicized_facts: agreement=100% dominant=0 values=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] counts={0:10}
