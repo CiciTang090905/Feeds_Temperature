@@ -5,43 +5,64 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Feeds_temperature</title>
     <style>
+        :root {
+            --bg-page: #eef0f2;
+            --bg-card: #f8f9fa;
+            --bg-button-alt: #dde4e7;
+            --text-primary: #1a2028;
+            --text-secondary: #4a5560;
+            --text-muted: #6b7580;
+            --accent: #2b7a8a;
+            --accent-fg: #f8f9fa;
+            --border: #d8dce0;
+            --font-serif: Georgia, "Times New Roman", serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Georgia, "Times New Roman", serif;
+            font-family: var(--font-serif);
             min-width: 360px;
             margin: 0;
-            padding: 16px;
-            background: #f4efe6;
-            color: #2a241d;
+            padding: 18px 16px 16px;
+            background: var(--bg-page);
+            color: var(--text-primary);
         }
 
         h1 {
-            font-size: 20px;
-            margin: 0 0 12px;
+            font-size: 18px;
+            margin: 0 0 14px;
+            letter-spacing: 0.01em;
         }
 
         .card {
-            background: #fffaf3;
-            border: 1px solid #d6c7b1;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
             border-radius: 14px;
             padding: 14px;
             margin-bottom: 12px;
+            box-shadow: 0 1px 0 rgba(26, 32, 40, 0.02);
         }
 
         .label {
             font-size: 12px;
-            color: #6f665b;
-            margin-bottom: 4px;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
         }
 
         .value {
             font-size: 16px;
             font-weight: 700;
+            line-height: 1.25;
         }
 
         .meta {
             font-size: 12px;
-            color: #6f665b;
-            margin-top: 4px;
+            color: var(--text-muted);
+            margin-top: 5px;
+            line-height: 1.45;
         }
 
         .actions {
@@ -54,16 +75,27 @@
         button {
             border: 0;
             border-radius: 999px;
-            padding: 10px 14px;
-            background: #b4472c;
-            color: white;
+            padding: 10px 16px;
+            background: var(--accent);
+            color: var(--accent-fg);
             font-weight: 700;
             cursor: pointer;
+            font-family: var(--font-serif);
+            transition: transform 120ms ease, opacity 120ms ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
         }
 
         button.secondary {
-            background: rgba(180, 71, 44, 0.12);
-            color: #8f331d;
+            background: var(--bg-button-alt);
+            color: var(--text-primary);
+        }
+
+        button:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
         }
 
         #post-list {
@@ -72,6 +104,22 @@
             line-height: 1.5;
             max-height: 220px;
             overflow: auto;
+            color: var(--text-primary);
+            padding-right: 4px;
+        }
+
+        #post-list::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        #post-list::-webkit-scrollbar-thumb {
+            background: #bcc7cd;
+            border-radius: 999px;
+            border: 2px solid var(--bg-card);
+        }
+
+        #post-list::-webkit-scrollbar-track {
+            background: transparent;
         }
     </style>
 </head>

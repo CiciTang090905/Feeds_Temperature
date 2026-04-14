@@ -1,5 +1,4 @@
 const CAPTURE_STORAGE_KEY = "captured_posts";
-const BACKEND_STATS_URL = "http://34.207.146.239:3001/api/posts/stats";
 const STATS_PANEL_ID = "feeds-temperature-stats-panel";
 const STATS_PANEL_HEADER_ID = "feeds-temperature-stats-panel-header";
 const STATS_PANEL_BODY_ID = "feeds-temperature-stats-panel-body";
@@ -493,29 +492,23 @@ async function refreshStatsPanel() {
     if (!panelBody) return;
 
     try {
-        const token = await getStoredAccessToken();
-        if (!token) {
+        const status = await getCaptureStatus();
+        if (!status?.session?.token) {
             panelBody.textContent = "Sign in through the extension settings to view your stats.";
             return;
         }
 
-        const response = await fetch(BACKEND_STATS_URL, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        if (response.status === 401) {
+        if (status?.dashboardStats?.unauthorized) {
             await handleUnauthorizedSession();
             panelBody.textContent = "Your access code is missing or invalid. Reconnect in extension settings.";
             return;
         }
 
-        if (!response.ok) {
-            throw new Error(`Backend responded with ${response.status}`);
+        if (!status?.dashboardStats?.ok || !status?.dashboardStats?.stats) {
+            throw new Error(status?.dashboardStats?.error || "Stats unavailable");
         }
 
-        const stats = await response.json();
-        renderStatsPanelBody(panelBody, stats);
+        renderStatsPanelBody(panelBody, status.dashboardStats.stats);
     } catch (error) {
         panelBody.textContent = "Stats unavailable. Check whether the hosted backend is reachable.";
     }
@@ -543,6 +536,18 @@ function loadCapturedPosts() {
 function saveCapturedPosts(posts) {
     return new Promise((resolve) => {
         chrome.storage.local.set({ [CAPTURE_STORAGE_KEY]: posts }, resolve);
+    });
+}
+
+function getCaptureStatus() {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: "GET_CAPTURE_STATUS" }, (response) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve(response || null);
+        });
     });
 }
 

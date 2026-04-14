@@ -11,6 +11,7 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 - Stores posts in Postgres via `DATABASE_URL` with dedupe on `user_id + platform + tweet_id`.
 - Uses a pseudonymous access code stored in `chrome.storage.local` to locate each user's own data.
 - Runs real-time sync labeling in the backend worker.
+- Supports a hosted backend deployment behind `nginx` on port `80`.
 - Prompt structure is still separated for clarity:
   - HAN
   - political
@@ -37,13 +38,22 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 
 ## API endpoints used
 
-- `GET http://localhost:3001/health`
-- `POST http://localhost:3001/api/users/register`
-- `POST http://localhost:3001/api/users/login`
-- `PATCH http://localhost:3001/api/users/me`
-- `POST http://localhost:3001/api/posts/batch`
-- `GET http://localhost:3001/api/posts`
-- `GET http://localhost:3001/api/posts/stats`
+- Local backend:
+  - `GET http://localhost:3001/health`
+  - `POST http://localhost:3001/api/users/register`
+  - `POST http://localhost:3001/api/users/login`
+  - `PATCH http://localhost:3001/api/users/me`
+  - `POST http://localhost:3001/api/posts/batch`
+  - `GET http://localhost:3001/api/posts`
+  - `GET http://localhost:3001/api/posts/stats`
+- Current hosted backend:
+  - `GET http://34.207.146.239/health`
+  - `POST http://34.207.146.239/api/users/register`
+  - `POST http://34.207.146.239/api/users/login`
+  - `PATCH http://34.207.146.239/api/users/me`
+  - `POST http://34.207.146.239/api/posts/batch`
+  - `GET http://34.207.146.239/api/posts`
+  - `GET http://34.207.146.239/api/posts/stats`
 
 ## Local developer setup
 
@@ -75,6 +85,24 @@ npm run dev
 - enable Developer Mode
 - choose "Load unpacked" and select project root
 
+## Current hosted deployment
+
+- Backend machine runs Ubuntu + Node 22
+- App process is managed by `pm2` as `feeds-temperature-backend`
+- Node backend listens internally on `127.0.0.1:3001`
+- `nginx` proxies public port `80` to the backend
+- Public health endpoint:
+  - `http://34.207.146.239/health`
+
+Useful server commands after `ssh dialog-temperature`:
+
+```bash
+pm2 status
+pm2 logs feeds-temperature-backend --lines 100
+curl -s http://127.0.0.1:3001/health
+curl -s http://127.0.0.1/health
+```
+
 End users do not need to set up env files or handle API keys. Those stay on the backend machine only.
 
 ## Backend scripts
@@ -97,6 +125,7 @@ Run from `backend/`:
 - `npm run label:watch` -> continuous labeling loop
 - `npm run labels:show` -> print latest labels
 - `npm run label:eval15` -> sample 15 labeled posts, re-label, and print agreement report
+- `npm run label:stability -- 15 10` -> sample 15 posts once, rerun labeling on the same set for 10 shuffled rounds, and compare stability
 
 ## Archived Batch Note
 
@@ -124,9 +153,9 @@ Run from `backend/`:
 ## Troubleshooting
 
 - `Backend unavailable: Failed to fetch`
-  - ensure backend is running on `http://localhost:3001`
-  - run `cd backend && npm run dev`
-  - check `curl http://localhost:3001/health`
+  - local mode: ensure backend is running on `http://localhost:3001`
+  - hosted mode: check `http://34.207.146.239/health`
+  - run `cd backend && npm run dev` for local development
 - `EADDRINUSE: address already in use :::3001`
   - another process already uses port 3001
   - check `lsof -nP -iTCP:3001 -sTCP:LISTEN`
@@ -139,4 +168,6 @@ Run from `backend/`:
 
 - `npm run label:eval15` also writes the latest report to:
   - `backend/tmp/label-eval-latest.txt`
+- `npm run label:stability -- 15 10` also writes the latest report to:
+  - `backend/tmp/label-stability-latest.txt`
 - `backend/tmp/` is git-ignored.

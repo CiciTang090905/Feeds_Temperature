@@ -31,9 +31,9 @@
     "background": {
         "service_worker": "background.js"
     },
-    "options_page": "options.html",
+    "options_page": "signin.html",
     "host_permissions": [
-        "http://34.207.146.239:3001/*",
+        "http://34.207.146.239/*",
         "https://x.com/*",
         "https://twitter.com/*"
     ]

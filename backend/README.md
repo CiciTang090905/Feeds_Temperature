@@ -23,6 +23,15 @@ Recommended backend setup:
 - cloud/server machine: keep secrets in `backend/.env`
 - end users do not need to set up env files
 
+Current cloud deployment shape:
+
+- Ubuntu server
+- Node 22 runtime
+- backend managed by `pm2`
+- backend app listens on `127.0.0.1:3001`
+- `nginx` reverse proxy serves public HTTP on port `80`
+- public health endpoint: `http://34.207.146.239/health`
+
 ## Routes
 
 - `GET /health` -> service health.
@@ -89,6 +98,7 @@ Political metric keys include:
 - `npm run label:watch` -> continuous labeling loop
 - `npm run labels:show` -> print latest labels
 - `npm run label:eval15` -> evaluate label agreement on random 15 labeled posts
+- `npm run label:stability -- 15 10` -> rerun labeling on one random 15-post sample across 10 shuffled rounds and compare stability
 
 ## Archived Batch Notes
 
@@ -105,3 +115,5 @@ Political metric keys include:
 
 - `label:eval15` prints to terminal and writes latest report to:
   - `backend/tmp/label-eval-latest.txt`
+- `label:stability` prints to terminal and writes latest report to:
+  - `backend/tmp/label-stability-latest.txt`

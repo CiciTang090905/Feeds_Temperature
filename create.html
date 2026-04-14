@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Feeds_temperature Account</title>
+    <link rel="stylesheet" href="styles/account.css">
+</head>
+<body data-page="create">
+    <main class="container">
+        <header>
+            <h1>Feeds_temperature</h1>
+            <p class="page-tagline">Create your account to start tracking.</p>
+        </header>
+        <section class="card-grid">
+            <div class="form-panel">
+                <form id="create-form" class="form-stack">
+                    <div>
+                        <h2>Create a new account</h2>
+                        <p class="panel-subtitle">Pick a username, and we'll generate an access code that unlocks your stats on any browser.</p>
+                    </div>
+                    <div class="field-group">
+                        <div class="step-row"><span class="step-num">1</span><span>Username</span></div>
+                        <label class="field-label" for="username">Username</label>
+                        <input class="input-underline" id="username" type="text" maxlength="100" placeholder="Choose a username…">
+                        <div class="field-hint">This is how you'll appear in your stats. You can change it later.</div>
+                    </div>
+                    <div class="field-group">
+                        <div class="step-row"><span class="step-num pending">2</span><span>Your access code</span></div>
+                        <div id="generated-code" class="code-placeholder">Your code will appear here after generation</div>
+                        <div class="button-row-tight">
+                            <button class="btn-secondary" id="copy-code" type="button" disabled>Copy</button>
+                            <button class="btn-secondary" id="download-code" type="button" disabled>Download as .txt</button>
+                        </div>
+                        <div class="text-danger"><strong>Save this code somewhere safe.</strong> We can't recover it if you lose it.</div>
+                    </div>
+                    <div class="feedback" data-feedback></div>
+                    <div class="button-row">
+                        <button class="btn-primary" type="submit">Generate access code</button>
+                        <button class="btn-primary" id="continue-account" type="button" hidden>Continue to my account</button>
+                    </div>
+                    <div>
+                        Already have a code? <a href="signin.html">Sign in instead</a>
+                    </div>
+                </form>
+            </div>
+            <div class="illus-panel">
+                <svg class="mood-arc" viewBox="0 0 320 240" aria-hidden="true">
+                    <circle cx="44" cy="88" r="24" fill="#c84a4a"></circle>
+                    <circle cx="100" cy="58" r="24" fill="#d88a6a"></circle>
+                    <circle cx="160" cy="44" r="24" fill="#a8b0ba"></circle>
+                    <circle cx="220" cy="58" r="24" fill="#6aa8b0"></circle>
+                    <circle cx="276" cy="88" r="24" fill="#2b7a8a"></circle>
+                    <g stroke="#1a2028" stroke-width="2.6" stroke-linecap="round" fill="none">
+                        <path d="M36 82 h5"></path><path d="M47 82 h5"></path><path d="M34 97 q10 -9 20 0"></path>
+                        <path d="M92 52 h5"></path><path d="M103 52 h5"></path><path d="M91 70 q9 -5 18 0"></path>
+                        <path d="M152 38 h5"></path><path d="M163 38 h5"></path><path d="M151 56 q9 6 18 0"></path>
+                        <path d="M212 52 h5"></path><path d="M223 52 h5"></path><path d="M211 69 q9 9 18 0"></path>
+                    </g>
+                    <g stroke="#f8f9fa" stroke-width="2.6" stroke-linecap="round" fill="none">
+                        <path d="M268 82 h5"></path><path d="M279 82 h5"></path><path d="M266 97 q10 12 20 0"></path>
+                    </g>
+                    <rect x="36" y="150" width="248" height="16" rx="8" fill="#d8dce0"></rect>
+                    <rect x="36" y="150" width="49.6" height="16" rx="8" fill="#c84a4a"></rect>
+                    <rect x="85.6" y="150" width="49.6" height="16" fill="#d88a6a"></rect>
+                    <rect x="135.2" y="150" width="49.6" height="16" fill="#a8b0ba"></rect>
+                    <rect x="184.8" y="150" width="49.6" height="16" fill="#6aa8b0"></rect>
+                    <rect x="234.4" y="150" width="49.6" height="16" rx="8" fill="#2b7a8a"></rect>
+                </svg>
+                <div class="mood-labels">
+                    <span>rage</span>
+                    <span>steady</span>
+                    <span>delight</span>
+                </div>
+                <p class="illus-copy">A fresh start. Let's see where your feeds land.</p>
+            </div>
+        </section>
+    </main>
+    <script src="account-ui.js"></script>
+</body>
+</html>

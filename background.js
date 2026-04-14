@@ -2,8 +2,9 @@ const CAPTURE_STORAGE_KEY = "captured_posts";
 const CAPTURE_STATS_KEY = "capture_stats";
 const SYNC_STATUS_KEY = "capture_sync_status";
 const USER_SESSION_KEY = "user_session";
-const BACKEND_BATCH_URL = "http://34.207.146.239:3001/api/posts/batch";
-const BACKEND_POSTS_URL = "http://34.207.146.239:3001/api/posts";
+const BACKEND_BATCH_URL = "http://34.207.146.239/api/posts/batch";
+const BACKEND_POSTS_URL = "http://34.207.146.239/api/posts";
+const BACKEND_STATS_URL = "http://34.207.146.239/api/posts/stats";
 const MAX_BATCH_SIZE = 15;
 const SYNC_RETRY_INTERVAL_MS = 5000;
 
@@ -41,17 +42,28 @@ function setCaptureStats(stats) {
 }
 
 function getUserSession() {
-    return readLocal(USER_SESSION_KEY, null);
+    return readStoredSession();
 }
 
-function setUserSession(session) {
-    return writeLocal(USER_SESSION_KEY, session);
+async function setUserSession(session, persist = true) {
+    if (!session) {
+        await clearUserSession();
+        return;
+    }
+
+    if (persist) {
+        await writeLocal(USER_SESSION_KEY, session);
+        await removeSession(USER_SESSION_KEY);
+        return;
+    }
+
+    await removeLocal(USER_SESSION_KEY);
+    await writeSession(USER_SESSION_KEY, session);
 }
 
 async function clearUserSession() {
-    return new Promise((resolve) => {
-        chrome.storage.local.remove([USER_SESSION_KEY], resolve);
-    });
+    await removeLocal(USER_SESSION_KEY);
+    await removeSession(USER_SESSION_KEY);
 }
 
 async function fetchBackendPostStats() {
@@ -97,6 +109,50 @@ async function fetchBackendPostStats() {
             ok: false,
             count: null,
             recentPosts: [],
+            error: error.message,
+        };
+    }
+}
+
+async function fetchBackendDashboardStats() {
+    const session = await getUserSession();
+    if (!session?.token) {
+        return {
+            ok: false,
+            stats: null,
+            error: "Sign in required",
+            unauthorized: true,
+        };
+    }
+
+    try {
+        const response = await fetch(BACKEND_STATS_URL, {
+            headers: buildAuthHeaders(session.token),
+        });
+
+        if (response.status === 401) {
+            await handleUnauthorized();
+            return {
+                ok: false,
+                stats: null,
+                error: "Sign in required",
+                unauthorized: true,
+            };
+        }
+
+        if (!response.ok) {
+            throw new Error(`Backend responded with ${response.status}`);
+        }
+
+        const stats = await response.json();
+        return {
+            ok: true,
+            stats,
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            stats: null,
             error: error.message,
         };
     }
@@ -235,6 +291,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             };
             const syncStatus = result[SYNC_STATUS_KEY] || null;
             const backendStats = await fetchBackendPostStats();
+            const dashboardStats = await fetchBackendDashboardStats();
             const session = await getUserSession();
 
             sendResponse({
@@ -242,6 +299,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 captureStats,
                 syncStatus,
                 backendStats,
+                dashboardStats,
                 session,
             });
         });
@@ -256,7 +314,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.type === "SET_USER_SESSION") {
-        setUserSession(request.session || null)
+        setUserSession(request.session || null, request.persist !== false)
             .then(() => syncCapturedPosts().catch(() => {}))
             .then(() => sendResponse({ ok: true }))
             .catch((error) => sendResponse({ ok: false, error: error.message }));
@@ -364,6 +422,53 @@ function writeLocal(key, value) {
     return new Promise((resolve) => {
         chrome.storage.local.set({ [key]: value }, resolve);
     });
+}
+
+function removeLocal(key) {
+    return new Promise((resolve) => {
+        chrome.storage.local.remove([key], resolve);
+    });
+}
+
+function readSession(key, fallbackValue) {
+    if (!chrome.storage.session) {
+        return Promise.resolve(fallbackValue);
+    }
+
+    return new Promise((resolve) => {
+        chrome.storage.session.get(key, (result) => {
+            resolve(result[key] ?? fallbackValue);
+        });
+    });
+}
+
+function writeSession(key, value) {
+    if (!chrome.storage.session) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+        chrome.storage.session.set({ [key]: value }, resolve);
+    });
+}
+
+function removeSession(key) {
+    if (!chrome.storage.session) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+        chrome.storage.session.remove([key], resolve);
+    });
+}
+
+async function readStoredSession() {
+    const localSession = await readLocal(USER_SESSION_KEY, null);
+    if (localSession) {
+        return localSession;
+    }
+
+    return readSession(USER_SESSION_KEY, null);
 }
 
 syncCapturedPosts().catch(() => {});
