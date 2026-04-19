@@ -4,6 +4,7 @@ const { notifyStatsUpdated } = require("../../services/statsEvents");
 
 const DEFAULT_INTERVAL_MS = 10000;
 const DEFAULT_BATCH_SIZE = 25;
+const LABEL_CONCURRENCY = Number(process.env.LABEL_CONCURRENCY) || 5;
 
 let isRunning = false;
 let timer = null;
@@ -46,65 +47,9 @@ async function processUnlabeledPosts() {
 
     console.log(`Found ${posts.length} unlabeled post(s) for first-pass labels.`);
 
-    let processedCount = 0;
-
-    for (const post of posts) {
-        const imageUrl = extractImageContextUrl(post);
-
-        try {
-            const firstPass = await classifyFirstPassWithRetry(post, imageUrl);
-            if (!firstPass) {
-                continue;
-            }
-
-            await postService.saveHanAndPoliticalLabels(
-                post.id,
-                {
-                    hanLabel: firstPass.labels.han_label,
-                    isPolitical: firstPass.labels.is_political,
-                },
-                {
-                    highly_aroused_negativity: firstPass.confidence.highly_aroused_negativity,
-                    is_political: firstPass.confidence.is_political,
-                    image_used_first_pass: firstPass.imageUsed,
-                }
-            );
-
-            console.log(
-                `processing: ${post.platform}:${post.tweetId} | db_id:${post.id} --> high_arousal_negative:${firstPass.labels.han_label} is_political:${firstPass.labels.is_political}`
-            );
-
-            if (firstPass.labels.is_political === 1) {
-                await processPoliticalSublabelsForPost(post, imageUrl);
-            }
-
-            processedCount += 1;
-        } catch (error) {
-            if (error.code === "CONTENT_FILTER") {
-                await postService.saveHanAndPoliticalLabels(
-                    post.id,
-                    {
-                        hanLabel: 0,
-                        isPolitical: 0,
-                    },
-                    {
-                        highly_aroused_negativity: null,
-                        is_political: null,
-                        image_used_first_pass: false,
-                    }
-                );
-                console.warn(
-                    `processing: ${post.platform}:${post.tweetId} | db_id:${post.id} --> high_arousal_negative:0 is_political:0 (fallback: ${error.filterCategory || "content_filter"})`
-                );
-                processedCount += 1;
-                continue;
-            }
-
-            console.error(`first-pass labeling failed for db_id:${post.id}: ${error.message}`);
-        }
-    }
-
-    return processedCount;
+    const counter = { count: 0 };
+    await runWithConcurrency(posts, LABEL_CONCURRENCY, (post) => processOnePost(post, counter));
+    return counter.count;
 }
 
 async function classifyFirstPassWithRetry(post, imageUrl) {
@@ -135,6 +80,62 @@ async function classifyFirstPassWithRetry(post, imageUrl) {
     }
 
     return null;
+}
+
+async function processOnePost(post, counter) {
+    const imageUrl = extractImageContextUrl(post);
+
+    try {
+        const firstPass = await classifyFirstPassWithRetry(post, imageUrl);
+        if (!firstPass) {
+            return;
+        }
+
+        await postService.saveHanAndPoliticalLabels(
+            post.id,
+            {
+                hanLabel: firstPass.labels.han_label,
+                isPolitical: firstPass.labels.is_political,
+            },
+            {
+                highly_aroused_negativity: firstPass.confidence.highly_aroused_negativity,
+                is_political: firstPass.confidence.is_political,
+                image_used_first_pass: firstPass.imageUsed,
+            }
+        );
+
+        console.log(
+            `processing: ${post.platform}:${post.tweetId} | db_id:${post.id} --> high_arousal_negative:${firstPass.labels.han_label} is_political:${firstPass.labels.is_political}`
+        );
+
+        if (firstPass.labels.is_political === 1) {
+            await processPoliticalSublabelsForPost(post, imageUrl);
+        }
+
+        counter.count += 1;
+    } catch (error) {
+        if (error.code === "CONTENT_FILTER") {
+            await postService.saveHanAndPoliticalLabels(
+                post.id,
+                {
+                    hanLabel: 0,
+                    isPolitical: 0,
+                },
+                {
+                    highly_aroused_negativity: null,
+                    is_political: null,
+                    image_used_first_pass: false,
+                }
+            );
+            console.warn(
+                `processing: ${post.platform}:${post.tweetId} | db_id:${post.id} --> high_arousal_negative:0 is_political:0 (fallback: ${error.filterCategory || "content_filter"})`
+            );
+            counter.count += 1;
+            return;
+        }
+
+        console.error(`first-pass labeling failed for db_id:${post.id}: ${error.message}`);
+    }
 }
 
 async function processPoliticalSublabelsForPost(post, imageUrl) {
@@ -186,6 +187,26 @@ async function processPoliticalSublabelsForPost(post, imageUrl) {
 
         console.error(`political sublabeling failed for db_id:${post.id}: ${error.message}`);
     }
+}
+
+async function runWithConcurrency(items, concurrency, fn) {
+    if (!Array.isArray(items) || items.length === 0) {
+        return;
+    }
+
+    const limit = Math.max(1, Number(concurrency) || 1);
+    let index = 0;
+
+    async function worker() {
+        while (index < items.length) {
+            const currentIndex = index;
+            index += 1;
+            await fn(items[currentIndex]);
+        }
+    }
+
+    const workerCount = Math.min(limit, items.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
 }
 
 function extractImageContextUrl(post) {
