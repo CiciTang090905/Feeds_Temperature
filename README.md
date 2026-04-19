@@ -16,7 +16,6 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
   - HAN
   - political
   - 8 individual sublabels
-- The previous batch implementation is archived in the repo for future reference.
 - Shows an in-page stats panel on X:
   - draggable
   - minimize/expand toggle
@@ -115,10 +114,6 @@ Run from `backend/`:
 - `npm run db:rollback` -> roll back one Postgres migration
 - `npm run db:migrate:create -- <name>` -> create a new migration stub
 - `npm run db:copy:sqlite` -> copy rows from `backend/data/feeds-temperature.db` into Postgres
-- `npm run archived:batch:submit-now` -> archived batch submitter helper
-- `npm run archived:batch:poll-now` -> archived batch poller helper
-- `npm run archived:batch:status` -> archived batch status helper
-- `npm run archived:batch:inspect -- <id>` -> inspect one archived batch job
 - `npm run label:one -- --text "<post text>"` -> test one input text
 - `npm run label:one -- <db_id>` -> label one DB row by id
 - `npm run label:all` -> one-shot labeling pass
@@ -127,10 +122,7 @@ Run from `backend/`:
 - `npm run label:eval15` -> sample 15 labeled posts, re-label, and print agreement report
 - `npm run label:stability -- 15 10` -> sample 15 posts once, rerun labeling on the same set for 10 shuffled rounds, and compare stability
 
-## Archived Batch Note
-
-- The old batch pipeline is archived, not active.
-- Only the backend machine should have these env files. The extension/frontend should never contain API keys.
+Only the backend machine should have these env files. The extension/frontend should never contain API keys.
 
 ## Captured post fields
 

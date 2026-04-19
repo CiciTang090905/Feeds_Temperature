@@ -71,8 +71,7 @@ Political metric keys include:
 - Deduplication: `UNIQUE(user_id, platform, tweet_id)` on `posts`
 - `author`, `media`, `quoted_post`, and `label_confidence` are stored as Postgres `JSONB`
 - Posts are scoped to a `users` row and identified by a bearer access code hashed in the backend.
-- Real-time sync labeling is the active path again.
-- The old batch implementation is archived under `backend/src/labeling/batch_archived/` for future reference.
+- Real-time sync labeling is the active path.
 - Prompt separation is preserved:
   - HAN prompt
   - political prompt
@@ -89,21 +88,12 @@ Political metric keys include:
 - `npm run db:rollback` -> roll back one Postgres migration
 - `npm run db:migrate:create -- <name>` -> create a new migration stub
 - `npm run db:copy:sqlite` -> copy rows from local SQLite into Postgres
-- `npm run archived:batch:submit-now` -> archived batch submitter helper
-- `npm run archived:batch:poll-now` -> archived batch poller helper
-- `npm run archived:batch:status` -> archived batch status helper
-- `npm run archived:batch:inspect -- <id>` -> inspect one archived batch job
 - `npm run label:one` -> label one text or one DB row
 - `npm run label:all` -> one-pass labeling
 - `npm run label:watch` -> continuous labeling loop
 - `npm run labels:show` -> print latest labels
 - `npm run label:eval15` -> evaluate label agreement on random 15 labeled posts
 - `npm run label:stability -- 15 10` -> rerun labeling on one random 15-post sample across 10 shuffled rounds and compare stability
-
-## Archived Batch Notes
-
-- Batch code is archived and not used by the active backend runtime.
-- If you revisit it later, the archived scripts and modules still exist for reference.
 
 ## Secret handling
 

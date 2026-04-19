@@ -19,12 +19,6 @@ const SELECT_COLUMNS_SQL = [
     "is_political",
     "label_confidence",
     "label_skip_reason",
-    "stage_a_status",
-    "stage_b_status",
-    "stage_a_batch_id",
-    "stage_b_batch_id",
-    "stage_a_last_error",
-    "stage_b_last_error",
     ...EXTRA_LABEL_COLUMNS,
 ].join(",\n            ");
 
@@ -313,17 +307,7 @@ async function saveHanAndPoliticalLabels(id, labels = {}, confidence = {}) {
             SET han_label = $1,
                 is_political = $2::smallint,
                 label_confidence = $3,
-                label_skip_reason = NULL,
-                stage_a_status = 'done',
-                stage_a_batch_id = NULL,
-                stage_a_last_error = NULL,
-                stage_b_status = CASE
-                    WHEN $2::smallint = 1 AND stage_b_status = 'n/a' THEN 'pending'
-                    WHEN $2::smallint = 0 THEN 'n/a'
-                    ELSE stage_b_status
-                END,
-                stage_b_batch_id = CASE WHEN $2::smallint = 0 THEN NULL ELSE stage_b_batch_id END,
-                stage_b_last_error = CASE WHEN $2::smallint = 0 THEN NULL ELSE stage_b_last_error END
+                label_skip_reason = NULL
             WHERE id = $4
         `,
         [
@@ -339,10 +323,7 @@ async function markPostLabelSkipped(id, reason) {
     await db.run(
         `
             UPDATE posts
-            SET label_skip_reason = $1,
-                stage_a_status = 'failed',
-                stage_a_last_error = $1,
-                stage_a_batch_id = NULL
+            SET label_skip_reason = $1
             WHERE id = $2
         `,
         [String(reason || "request_failed_after_retry"), id]
@@ -363,10 +344,7 @@ async function savePoliticalSublabels(id, sublabels = {}, confidence = {}) {
                 social_distrust = $6,
                 social_distance = $7,
                 biased_evaluation_politicized_facts = $8,
-                label_confidence = $9,
-                stage_b_status = 'done',
-                stage_b_batch_id = NULL,
-                stage_b_last_error = NULL
+                label_confidence = $9
             WHERE id = $10
         `,
         [
@@ -424,12 +402,6 @@ function mapRowToPost(row) {
         isPolitical: row.is_political,
         labelConfidence: row.label_confidence || null,
         labelSkipReason: row.label_skip_reason || null,
-        stageAStatus: row.stage_a_status,
-        stageBStatus: row.stage_b_status,
-        stageABatchId: row.stage_a_batch_id == null ? null : Number(row.stage_a_batch_id),
-        stageBBatchId: row.stage_b_batch_id == null ? null : Number(row.stage_b_batch_id),
-        stageALastError: row.stage_a_last_error || null,
-        stageBLastError: row.stage_b_last_error || null,
         extraLabels,
     };
 }
