@@ -68,7 +68,7 @@ Political metric keys include:
 ## Storage and labeling behavior
 
 - Managed Postgres via `DATABASE_URL`
-- Deduplication: `UNIQUE(user_id, platform, tweet_id)` on `posts`
+- Cross-user deduplication: canonical `posts` are unique on `(platform, tweet_id)`, and `user_posts` tracks which user saw which post
 - `author`, `media`, `quoted_post`, and `label_confidence` are stored as Postgres `JSONB`
 - Posts are scoped to a `users` row and identified by a bearer access code hashed in the backend.
 - Real-time sync labeling is the active path.

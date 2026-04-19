@@ -3,9 +3,8 @@ const { EXTRA_LABELS, EXTRA_LABEL_COLUMNS } = require("../labeling/shared/catalo
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const SELECT_COLUMNS_SQL = [
+const BASE_POST_COLUMNS = [
     "id",
-    "user_id",
     "platform",
     "tweet_id",
     "author",
@@ -20,7 +19,7 @@ const SELECT_COLUMNS_SQL = [
     "label_confidence",
     "label_skip_reason",
     ...EXTRA_LABEL_COLUMNS,
-].join(",\n            ");
+];
 
 const POLITICAL_POST_METRIC_DEFINITIONS = [
     { responseKey: "partisanAnimosity", sourceColumn: "partisan_animosity", sqlAlias: "partisan_animosity" },
@@ -46,6 +45,22 @@ function buildPostKey(post) {
     return `${post.platform}:${post.tweetId}`;
 }
 
+function buildSelectColumns({ postAlias = "posts", userPostAlias = null } = {}) {
+    const columns = BASE_POST_COLUMNS.map((column) => `${postAlias}.${column} AS ${column}`);
+
+    if (userPostAlias) {
+        columns.push(`${userPostAlias}.user_id AS user_id`);
+        columns.push(`${userPostAlias}.captured_at AS user_captured_at`);
+        columns.push(`${userPostAlias}.received_at AS user_received_at`);
+    } else {
+        columns.push("NULL::bigint AS user_id");
+        columns.push(`${postAlias}.captured_at AS user_captured_at`);
+        columns.push(`${postAlias}.received_at AS user_received_at`);
+    }
+
+    return columns.join(",\n            ");
+}
+
 async function ingestPosts(posts) {
     throw new Error("ingestPosts requires a user context. Use ingestPostsForUser(userId, posts).");
 }
@@ -54,53 +69,94 @@ async function ingestPostsForUser(userId, posts) {
     const acceptedIds = [];
     const duplicateIds = [];
 
-    for (const post of posts) {
-        const key = buildPostKey(post);
-        const receivedAt = new Date().toISOString();
+    await db.withTransaction(async (tx) => {
+        for (const post of posts) {
+            const key = buildPostKey(post);
+            const receivedAt = new Date().toISOString();
 
-        try {
-            const result = await db.run(
-                `
-                    INSERT INTO posts (
-                        user_id,
-                        platform,
-                        tweet_id,
-                        author,
-                        posted_at,
-                        text,
-                        media,
-                        quoted_post,
-                        captured_at,
-                        received_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                    ON CONFLICT (user_id, platform, tweet_id) DO NOTHING
-                    RETURNING id
-                `,
-                [
-                    userId,
-                    post.platform,
-                    post.tweetId,
-                    JSON.stringify(post.author || null),
-                    post.postedAt || null,
-                    post.text,
-                    JSON.stringify(post.media || null),
-                    JSON.stringify(post.quotedPost || null),
-                    post.capturedAt || null,
-                    receivedAt,
-                ]
-            );
+            try {
+                const canonicalRows = await tx.query(
+                    `
+                        INSERT INTO posts (
+                            platform,
+                            tweet_id,
+                            author,
+                            posted_at,
+                            text,
+                            media,
+                            quoted_post,
+                            captured_at,
+                            received_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                        ON CONFLICT (platform, tweet_id) DO UPDATE
+                        SET author = COALESCE(posts.author, EXCLUDED.author),
+                            posted_at = COALESCE(posts.posted_at, EXCLUDED.posted_at),
+                            text = COALESCE(NULLIF(posts.text, ''), EXCLUDED.text),
+                            media = COALESCE(posts.media, EXCLUDED.media),
+                            quoted_post = COALESCE(posts.quoted_post, EXCLUDED.quoted_post),
+                            captured_at = COALESCE(
+                                GREATEST(posts.captured_at, EXCLUDED.captured_at),
+                                posts.captured_at,
+                                EXCLUDED.captured_at
+                            ),
+                            received_at = GREATEST(posts.received_at, EXCLUDED.received_at)
+                        RETURNING id
+                    `,
+                    [
+                        post.platform,
+                        post.tweetId,
+                        JSON.stringify(post.author || null),
+                        post.postedAt || null,
+                        post.text,
+                        JSON.stringify(post.media || null),
+                        JSON.stringify(post.quotedPost || null),
+                        post.capturedAt || null,
+                        receivedAt,
+                    ]
+                );
 
-            if (result.changes === 0) {
-                duplicateIds.push(post.tweetId);
-                continue;
+                const postId = Number(canonicalRows.rows[0].id);
+                const linkInsert = await tx.run(
+                    `
+                        INSERT INTO user_posts (
+                            user_id,
+                            post_id,
+                            captured_at,
+                            received_at
+                        ) VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (user_id, post_id) DO NOTHING
+                        RETURNING post_id
+                    `,
+                    [userId, postId, post.capturedAt || null, receivedAt]
+                );
+
+                if (linkInsert.changes === 0) {
+                    await tx.run(
+                        `
+                            UPDATE user_posts
+                            SET captured_at = COALESCE(
+                                    GREATEST(captured_at, $1),
+                                    captured_at,
+                                    $1
+                                ),
+                                received_at = GREATEST(received_at, $2)
+                            WHERE user_id = $3
+                              AND post_id = $4
+                        `,
+                        [post.capturedAt || null, receivedAt, userId, postId]
+                    );
+
+                    duplicateIds.push(post.tweetId);
+                    continue;
+                }
+
+                acceptedIds.push(post.tweetId);
+            } catch (error) {
+                error.message = `Failed to store post ${key}: ${error.message}`;
+                throw error;
             }
-
-            acceptedIds.push(post.tweetId);
-        } catch (error) {
-            error.message = `Failed to store post ${key}: ${error.message}`;
-            throw error;
         }
-    }
+    });
 
     return {
         insertedCount: acceptedIds.length,
@@ -115,13 +171,25 @@ async function getAllPosts() {
 }
 
 async function getAllPostsForUser(userId) {
-    const rows = await db.all(`
-        SELECT
-            ${SELECT_COLUMNS_SQL}
-        FROM posts
-        ${userId == null ? "" : "WHERE user_id = $1"}
-        ORDER BY id DESC
-    `, userId == null ? [] : [userId]);
+    const rows = await db.all(
+        userId == null
+            ? `
+                SELECT
+                    ${buildSelectColumns({ postAlias: "posts" })}
+                FROM posts
+                ORDER BY posts.id DESC
+            `
+            : `
+                SELECT
+                    ${buildSelectColumns({ postAlias: "posts", userPostAlias: "user_posts" })}
+                FROM user_posts
+                JOIN posts
+                  ON posts.id = user_posts.post_id
+                WHERE user_posts.user_id = $1
+                ORDER BY user_posts.received_at DESC, posts.id DESC
+            `,
+        userId == null ? [] : [userId]
+    );
 
     return rows.map(mapRowToPost);
 }
@@ -131,14 +199,37 @@ async function getPostStats() {
 }
 
 async function getPostStatsForUser(userId) {
+    if (userId == null) {
+        const labeledWhereClause = buildLabeledWhereClause("posts");
+        const dayAgoMs = Date.now() - DAY_MS;
+        const [allTime, last24Hours] = await Promise.all([
+            getAggregatedPostStats("FROM posts", labeledWhereClause, []),
+            getAggregatedPostStats(
+                "FROM posts",
+                buildWhereClause(labeledWhereClause, buildLast24HoursWhereClause("posts", 1)),
+                [dayAgoMs]
+            ),
+        ]);
+
+        return {
+            allTime,
+            last24Hours,
+        };
+    }
+
     const dayAgoMs = Date.now() - DAY_MS;
-    const labeledWhereClause = buildWhereClause(buildUserWhereClause(userId, 1), buildLabeledWhereClause());
-    const baseParams = userId == null ? [] : [userId];
+    const fromClause = `
+        FROM user_posts
+        JOIN posts
+          ON posts.id = user_posts.post_id
+    `;
+    const labeledWhereClause = buildWhereClause(buildUserWhereClause("user_posts", userId, 1), buildLabeledWhereClause("posts"));
     const [allTime, last24Hours] = await Promise.all([
-        getAggregatedPostStats(labeledWhereClause, baseParams),
+        getAggregatedPostStats(fromClause, labeledWhereClause, [userId]),
         getAggregatedPostStats(
-            buildWhereClause(labeledWhereClause, "captured_at IS NOT NULL", `captured_at >= $${baseParams.length + 1}`),
-            [...baseParams, dayAgoMs]
+            fromClause,
+            buildWhereClause(labeledWhereClause, buildLast24HoursWhereClause("user_posts", 2)),
+            [userId, dayAgoMs]
         ),
     ]);
 
@@ -148,30 +239,34 @@ async function getPostStatsForUser(userId) {
     };
 }
 
-function buildLabeledWhereClause() {
+function buildLabeledWhereClause(postAlias = "posts") {
     const requiredColumns = ["han_label", "is_political"];
-    return requiredColumns.map((column) => `${column} IS NOT NULL`).join(" AND ");
+    return requiredColumns.map((column) => `${postAlias}.${column} IS NOT NULL`).join(" AND ");
 }
 
-function buildUserWhereClause(userId, paramIndex = 1) {
+function buildUserWhereClause(tableAlias, userId, paramIndex = 1) {
     if (userId == null) {
         return "";
     }
 
-    return `user_id = $${paramIndex}`;
+    return `${tableAlias}.user_id = $${paramIndex}`;
+}
+
+function buildLast24HoursWhereClause(userPostAlias, paramIndex) {
+    return `COALESCE(${userPostAlias}.captured_at, FLOOR(EXTRACT(EPOCH FROM ${userPostAlias}.received_at) * 1000)::bigint) >= $${paramIndex}`;
 }
 
 function buildWhereClause(...clauses) {
     return clauses.filter(Boolean).join(" AND ");
 }
 
-async function getAggregatedPostStats(whereClause = "", params = []) {
+async function getAggregatedPostStats(fromClause, whereClause = "", params = []) {
     const whereSql = whereClause ? `WHERE ${whereClause}` : "";
     const rows = await db.all(
         `
             SELECT
                 ${STATS_SELECT_SQL}
-            FROM posts
+            ${fromClause}
             ${whereSql}
         `,
         params
@@ -218,7 +313,7 @@ async function getUnlabeledPosts(limit = 25) {
     const rows = await db.all(
         `
             SELECT
-                ${SELECT_COLUMNS_SQL}
+                ${buildSelectColumns({ postAlias: "posts" })}
             FROM posts
             WHERE (han_label IS NULL OR is_political IS NULL)
               AND (label_skip_reason IS NULL OR TRIM(label_skip_reason) = '')
@@ -235,7 +330,7 @@ async function getUnlabeledPostsForPoliticalSublabels(limit = 25) {
     const rows = await db.all(
         `
             SELECT
-                ${SELECT_COLUMNS_SQL}
+                ${buildSelectColumns({ postAlias: "posts" })}
             FROM posts
             WHERE is_political = 1
               AND (
@@ -263,7 +358,7 @@ async function getUnlabeledPostsByLabelColumn(labelColumn, limit = 25) {
     const rows = await db.all(
         `
             SELECT
-                ${SELECT_COLUMNS_SQL}
+                ${buildSelectColumns({ postAlias: "posts" })}
             FROM posts
             WHERE ${labelColumn} IS NULL
               AND (label_skip_reason IS NULL OR TRIM(label_skip_reason) = '')
@@ -396,8 +491,8 @@ function mapRowToPost(row) {
         text: row.text,
         media: row.media || null,
         quotedPost: row.quoted_post || null,
-        capturedAt: row.captured_at == null ? null : Number(row.captured_at),
-        receivedAt: formatTimestamp(row.received_at),
+        capturedAt: row.user_captured_at == null ? null : Number(row.user_captured_at),
+        receivedAt: formatTimestamp(row.user_received_at),
         hanLabel: row.han_label,
         isPolitical: row.is_political,
         labelConfidence: row.label_confidence || null,
