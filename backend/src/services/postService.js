@@ -201,15 +201,19 @@ async function getPostStats() {
 async function getPostStatsForUser(userId) {
     if (userId == null) {
         const labeledWhereClause = buildLabeledWhereClause("posts");
-        const dayAgoMs = Date.now() - DAY_MS;
-        const [allTime, last24Hours] = await Promise.all([
+        const [allTime, last24Hours, totalCapturedAllTime, totalCapturedLast24Hours] = await Promise.all([
             getAggregatedPostStats("FROM posts", labeledWhereClause, []),
             getAggregatedPostStats(
                 "FROM posts",
-                buildWhereClause(labeledWhereClause, buildLast24HoursWhereClause("posts", 1)),
-                [dayAgoMs]
+                buildWhereClause(labeledWhereClause, buildRecentReceivedAtWhereClause("posts")),
+                []
             ),
+            getTotalCapturedCount("FROM posts", "", []),
+            getTotalCapturedCount("FROM posts", buildRecentReceivedAtWhereClause("posts"), []),
         ]);
+
+        allTime.totalCaptured = totalCapturedAllTime;
+        last24Hours.totalCaptured = totalCapturedLast24Hours;
 
         return {
             allTime,
@@ -217,21 +221,29 @@ async function getPostStatsForUser(userId) {
         };
     }
 
-    const dayAgoMs = Date.now() - DAY_MS;
     const fromClause = `
         FROM user_posts
         JOIN posts
           ON posts.id = user_posts.post_id
     `;
     const labeledWhereClause = buildWhereClause(buildUserWhereClause("user_posts", userId, 1), buildLabeledWhereClause("posts"));
-    const [allTime, last24Hours] = await Promise.all([
+    const [allTime, last24Hours, totalCapturedAllTime, totalCapturedLast24Hours] = await Promise.all([
         getAggregatedPostStats(fromClause, labeledWhereClause, [userId]),
         getAggregatedPostStats(
             fromClause,
-            buildWhereClause(labeledWhereClause, buildLast24HoursWhereClause("user_posts", 2)),
-            [userId, dayAgoMs]
+            buildWhereClause(labeledWhereClause, buildRecentReceivedAtWhereClause("user_posts")),
+            [userId]
+        ),
+        getTotalCapturedCount("FROM user_posts", buildUserWhereClause("user_posts", userId, 1), [userId]),
+        getTotalCapturedCount(
+            "FROM user_posts",
+            buildWhereClause(buildUserWhereClause("user_posts", userId, 1), buildRecentReceivedAtWhereClause("user_posts")),
+            [userId]
         ),
     ]);
+
+    allTime.totalCaptured = totalCapturedAllTime;
+    last24Hours.totalCaptured = totalCapturedLast24Hours;
 
     return {
         allTime,
@@ -252,8 +264,8 @@ function buildUserWhereClause(tableAlias, userId, paramIndex = 1) {
     return `${tableAlias}.user_id = $${paramIndex}`;
 }
 
-function buildLast24HoursWhereClause(userPostAlias, paramIndex) {
-    return `COALESCE(${userPostAlias}.captured_at, FLOOR(EXTRACT(EPOCH FROM ${userPostAlias}.received_at) * 1000)::bigint) >= $${paramIndex}`;
+function buildRecentReceivedAtWhereClause(tableAlias) {
+    return `${tableAlias}.received_at >= NOW() - INTERVAL '24 hours'`;
 }
 
 function buildWhereClause(...clauses) {
@@ -276,6 +288,20 @@ async function getAggregatedPostStats(fromClause, whereClause = "", params = [])
     return buildStatsFromRow(row);
 }
 
+async function getTotalCapturedCount(fromClause, whereClause = "", params = []) {
+    const whereSql = whereClause ? `WHERE ${whereClause}` : "";
+    const rows = await db.all(
+        `
+            SELECT COUNT(*) AS total_captured
+            ${fromClause}
+            ${whereSql}
+        `,
+        params
+    );
+
+    return Number(rows[0]?.total_captured) || 0;
+}
+
 function buildStatsFromRow(row) {
     const total = Number(row.total_posts) || 0;
     const highlyNegativeArousalCount = Number(row.highly_negative_arousal) || 0;
@@ -291,6 +317,7 @@ function buildStatsFromRow(row) {
     }
 
     return {
+        totalCaptured: Number(row.total_captured) || 0,
         totalPostsWatched: total,
         allPosts: {
             highlyNegativeArousal: {

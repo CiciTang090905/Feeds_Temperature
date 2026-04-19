@@ -4,11 +4,13 @@ const STATS_PANEL_HEADER_ID = "feeds-temperature-stats-panel-header";
 const STATS_PANEL_BODY_ID = "feeds-temperature-stats-panel-body";
 const STATS_PANEL_TOGGLE_ID = "feeds-temperature-stats-panel-toggle";
 const STATS_REFRESH_MS = 10000;
-const PANEL_DEFAULT_HEIGHT = "420px";
+const PANEL_DEFAULT_HEIGHT = "520px";
 const PANEL_DEFAULT_MIN_HEIGHT = "180px";
+const FEED_TEMPERATURE_PANEL_STYLE_ID = "feeds-temperature-panel-style";
 const capturedIds = new Set();
 const tweetIdRegex = /\/status\/([0-9]+)/;
 let statsPanelTimerId = null;
+let activeStatsTab = "allTime";
 const panelState = {
     drag: null,
     expandedHeight: PANEL_DEFAULT_HEIGHT,
@@ -198,6 +200,19 @@ function createElement(tagName, styles = {}) {
     return element;
 }
 
+const METRIC_COLORS = {
+    highlyNegativeArousal: "#E24B4A",
+    political: "#534AB7",
+    partisanAnimosity: "#D85A30",
+    supportUndemocraticPractices: "#BA7517",
+    supportPartisanViolence: "#A32D2D",
+    supportUndemocraticCandidates: "#993556",
+    oppositionToBipartisanCooperation: "#5F5E5A",
+    socialDistrust: "#1D9E75",
+    socialDistance: "#185FA5",
+    biasedEvaluationOfPoliticizedFacts: "#639922",
+};
+
 function ensureStatsPanel() {
     let panel = document.getElementById(STATS_PANEL_ID);
     if (panel) return panel;
@@ -206,7 +221,7 @@ function ensureStatsPanel() {
         position: "fixed",
         top: "72px",
         right: "16px",
-        width: "300px",
+        width: "320px",
         height: PANEL_DEFAULT_HEIGHT,
         maxHeight: "80vh",
         minWidth: "260px",
@@ -216,7 +231,7 @@ function ensureStatsPanel() {
         overflow: "hidden",
         resize: "both",
         borderRadius: "12px",
-        background: "rgba(15, 20, 25, 0.96)",
+        background: "rgba(15, 20, 25, 0.97)",
         color: "#f7f9f9",
         border: "1px solid rgba(255, 255, 255, 0.16)",
         boxShadow: "0 8px 24px rgba(0, 0, 0, 0.3)",
@@ -237,10 +252,49 @@ function ensureStatsPanel() {
         borderBottom: "1px solid rgba(255, 255, 255, 0.14)",
     });
     header.id = STATS_PANEL_HEADER_ID;
-    header.textContent = "Feed Temperature";
+
+    injectPanelStyles(panel);
+
+    const titleSpan = createElement("span", {
+        fontSize: "13px",
+        fontWeight: "500",
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        color: "rgba(255, 255, 255, 0.6)",
+    });
+    titleSpan.textContent = "Feed temperature";
+
+    const rightCluster = createElement("div", {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+    });
+
+    const liveBadge = createElement("span", {
+        fontFamily: "monospace",
+        fontSize: "11px",
+        padding: "2px 8px",
+        borderRadius: "6px",
+        background: "rgba(29, 158, 117, 0.15)",
+        color: "#1D9E75",
+        display: "flex",
+        alignItems: "center",
+        gap: "5px",
+    });
+
+    const pulseDot = createElement("span", {
+        width: "6px",
+        height: "6px",
+        borderRadius: "50%",
+        background: "#1D9E75",
+        display: "inline-block",
+    });
+    pulseDot.className = "ft-pulse-green";
+
+    liveBadge.appendChild(pulseDot);
+    liveBadge.appendChild(document.createTextNode("live"));
 
     const toggleButton = createElement("button", {
-        marginLeft: "10px",
         width: "24px",
         height: "24px",
         display: "flex",
@@ -258,13 +312,17 @@ function ensureStatsPanel() {
     toggleButton.id = STATS_PANEL_TOGGLE_ID;
     toggleButton.type = "button";
     toggleButton.textContent = "−";
-    header.appendChild(toggleButton);
+
+    header.appendChild(titleSpan);
+    rightCluster.appendChild(liveBadge);
+    rightCluster.appendChild(toggleButton);
+    header.appendChild(rightCluster);
 
     const body = createElement("div", {
         flex: "1 1 auto",
         minHeight: "0",
-        padding: "12px",
-        paddingBottom: "20px",
+        padding: "0",
+        paddingBottom: "8px",
         overflowY: "auto",
         overflowX: "hidden",
         wordBreak: "break-word",
@@ -280,6 +338,33 @@ function ensureStatsPanel() {
     wireStatsPanelInteractions(panel, header, body, toggleButton);
 
     return panel;
+}
+
+function injectPanelStyles(panel) {
+    if (panel.querySelector(`#${FEED_TEMPERATURE_PANEL_STYLE_ID}`)) {
+        return;
+    }
+
+    const style = document.createElement("style");
+    style.id = FEED_TEMPERATURE_PANEL_STYLE_ID;
+    style.textContent = `
+        @keyframes ft-pulse-green {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        @keyframes ft-pulse-amber {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        @keyframes ft-barber {
+            0% { background-position: 0 0; }
+            100% { background-position: 11.3px 0; }
+        }
+        .ft-pulse-green { animation: ft-pulse-green 2s ease-in-out infinite; }
+        .ft-pulse-amber { animation: ft-pulse-amber 1.5s ease-in-out infinite; }
+        .ft-barber { animation: ft-barber 0.8s linear infinite; }
+    `;
+    panel.appendChild(style);
 }
 
 function wireStatsPanelInteractions(panel, header, body, toggleButton) {
@@ -338,79 +423,99 @@ function wireStatsPanelInteractions(panel, header, body, toggleButton) {
 }
 
 const ALL_POST_ROWS = [
-    { key: "highlyNegativeArousal", label: "Highly negative arousal" },
+    { key: "highlyNegativeArousal", label: "Negative arousal" },
     { key: "political", label: "Political" },
 ];
 
 const POLITICAL_METRIC_ROWS = [
     { key: "partisanAnimosity", label: "Partisan animosity" },
-    { key: "supportUndemocraticPractices", label: "Support for undemocratic practices" },
-    { key: "supportPartisanViolence", label: "Support for partisan violence" },
-    { key: "supportUndemocraticCandidates", label: "Support for undemocratic candidates" },
-    { key: "oppositionToBipartisanCooperation", label: "Opposition to bipartisan cooperation" },
+    { key: "supportUndemocraticPractices", label: "Undemocratic practices" },
+    { key: "supportPartisanViolence", label: "Partisan violence" },
+    { key: "supportUndemocraticCandidates", label: "Undemocratic candidates" },
+    { key: "oppositionToBipartisanCooperation", label: "Anti-bipartisan" },
     { key: "socialDistrust", label: "Social distrust" },
     { key: "socialDistance", label: "Social distance" },
-    { key: "biasedEvaluationOfPoliticizedFacts", label: "Biased evaluation of politicized facts" },
+    { key: "biasedEvaluationOfPoliticizedFacts", label: "Biased fact eval" },
 ];
 
-function createStatRow(label, value, isStrong = false) {
+function createMetricRow(label, count, percent, fillColor) {
     const row = createElement("div", {
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) auto",
-        alignItems: "baseline",
+        gridTemplateColumns: "100px 1fr auto",
+        alignItems: "center",
         columnGap: "10px",
     });
 
     const labelEl = createElement("div", {
-        opacity: "0.94",
-        fontWeight: isStrong ? "700" : "500",
+        fontSize: "12px",
+        color: "rgba(255, 255, 255, 0.65)",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
     });
     labelEl.textContent = label;
 
+    const track = createElement("div", {
+        height: "6px",
+        borderRadius: "3px",
+        background: "rgba(255,255,255,0.08)",
+        overflow: "hidden",
+    });
+
+    const fill = createElement("div", {
+        height: "6px",
+        borderRadius: "3px",
+        background: fillColor,
+        width: `${Math.max(0, Math.min(100, Number(percent) || 0))}%`,
+    });
+    track.appendChild(fill);
+
     const valueEl = createElement("div", {
         textAlign: "right",
-        fontWeight: "700",
         whiteSpace: "nowrap",
+        fontFamily: "monospace",
+        fontSize: "11px",
     });
-    valueEl.textContent = value;
+
+    const countSpan = createElement("span", {
+        color: "#f7f9f9",
+    });
+    countSpan.textContent = String(Number(count) || 0);
+
+    const percentSpan = createElement("span", {
+        color: "rgba(255, 255, 255, 0.4)",
+    });
+    percentSpan.textContent = `(${Number(percent) || 0}%)`;
+
+    valueEl.appendChild(countSpan);
+    valueEl.appendChild(percentSpan);
 
     row.appendChild(labelEl);
+    row.appendChild(track);
     row.appendChild(valueEl);
     return row;
 }
 
-function createSectionCaption(text) {
+function createGroupLabel(text) {
     const caption = createElement("div", {
-        marginTop: "8px",
-        marginBottom: "2px",
-        opacity: "0.8",
-        fontSize: "12px",
-        fontWeight: "700",
-        letterSpacing: "0.02em",
+        fontSize: "11px",
+        fontWeight: "500",
+        letterSpacing: "0.03em",
+        textTransform: "uppercase",
+        color: "rgba(255,255,255,0.35)",
+        paddingBottom: "8px",
+        borderBottom: "1px solid rgba(255,255,255,0.12)",
+        marginBottom: "8px",
     });
     caption.textContent = text;
     return caption;
 }
 
-function createStatsSection(title, sectionStats) {
-    const card = createElement("section", {
-        border: "1px solid rgba(255, 255, 255, 0.12)",
-        borderRadius: "10px",
-        background: "rgba(255, 255, 255, 0.03)",
-        padding: "10px",
-    });
-
-    const heading = createElement("div", {
-        fontSize: "15px",
-        fontWeight: "800",
-        marginBottom: "8px",
-    });
-    heading.textContent = title;
-    card.appendChild(heading);
-
-    const rows = createElement("div", {
+function createMetricsSection(sectionStats) {
+    const container = createElement("section", {
         display: "grid",
-        rowGap: "6px",
+        rowGap: "8px",
+        padding: "14px 16px 8px",
     });
 
     if (!sectionStats || !sectionStats.allPosts || !sectionStats.politicalPosts) {
@@ -419,44 +524,210 @@ function createStatsSection(title, sectionStats) {
             fontSize: "12px",
         });
         empty.textContent = "No data available.";
-        rows.appendChild(empty);
-        card.appendChild(rows);
-        return card;
+        container.appendChild(empty);
+        return container;
     }
 
-    rows.appendChild(createStatRow("Posts watched", String(Number(sectionStats.totalPostsWatched) || 0), true));
-
-    rows.appendChild(createSectionCaption("% of all posts"));
+    container.appendChild(createGroupLabel("% of all posts"));
     for (const metric of ALL_POST_ROWS) {
-        const percent = Number(sectionStats.allPosts?.[metric.key]?.percent) || 0;
-        rows.appendChild(createStatRow(metric.label, `${percent}%`));
+        const metricStats = sectionStats.allPosts?.[metric.key] || {};
+        container.appendChild(
+            createMetricRow(
+                metric.label,
+                metricStats.count,
+                metricStats.percent,
+                METRIC_COLORS[metric.key] || "#534AB7"
+            )
+        );
     }
 
-    rows.appendChild(createSectionCaption("% of political posts"));
+    const divider = createElement("div", {
+        height: "1px",
+        background: "rgba(255,255,255,0.12)",
+        margin: "2px 0 4px",
+    });
+    container.appendChild(divider);
+
+    container.appendChild(createGroupLabel("% of political posts"));
     for (const metric of POLITICAL_METRIC_ROWS) {
-        const percent = Number(sectionStats.politicalPosts?.metrics?.[metric.key]?.percent) || 0;
-        rows.appendChild(createStatRow(metric.label, `${percent}%`));
+        const metricStats = sectionStats.politicalPosts?.metrics?.[metric.key] || {};
+        container.appendChild(
+            createMetricRow(
+                metric.label,
+                metricStats.count,
+                metricStats.percent,
+                METRIC_COLORS[metric.key] || "#534AB7"
+            )
+        );
     }
 
-    card.appendChild(rows);
-    return card;
+    return container;
+}
+
+function createProgressSection(stats) {
+    const captured = Number(stats?.totalCaptured) || 0;
+    const labeled = Number(stats?.totalPostsWatched) || 0;
+    const queue = Math.max(0, captured - labeled);
+    const pct = captured > 0 ? (labeled / captured) * 100 : 100;
+
+    const section = createElement("section", {
+        padding: "14px 16px 12px",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
+        display: "grid",
+        rowGap: "12px",
+    });
+
+    const topRow = createElement("div", {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: "12px",
+    });
+
+    const left = createElement("div", {
+        display: "flex",
+        alignItems: "baseline",
+        gap: "8px",
+    });
+
+    const labeledValue = createElement("span", {
+        fontFamily: "monospace",
+        fontSize: "22px",
+        fontWeight: "700",
+        color: "#f7f9f9",
+        lineHeight: "1",
+    });
+    labeledValue.textContent = String(labeled);
+
+    const labeledMeta = createElement("span", {
+        fontSize: "12px",
+        color: "rgba(255, 255, 255, 0.4)",
+    });
+    labeledMeta.textContent = `of ${captured} labeled`;
+
+    left.appendChild(labeledValue);
+    left.appendChild(labeledMeta);
+    topRow.appendChild(left);
+
+    if (queue > 0) {
+        const badge = createElement("span", {
+            background: "rgba(186, 117, 23, 0.15)",
+            color: "#BA7517",
+            borderRadius: "6px",
+            padding: "3px 10px",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontFamily: "monospace",
+            fontSize: "12px",
+        });
+
+        const amberDot = createElement("span", {
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            background: "#BA7517",
+            display: "inline-block",
+        });
+        amberDot.className = "ft-pulse-amber";
+
+        badge.appendChild(amberDot);
+        badge.appendChild(document.createTextNode(String(queue)));
+        topRow.appendChild(badge);
+    }
+
+    section.appendChild(topRow);
+
+    const progressTrack = createElement("div", {
+        position: "relative",
+        height: "8px",
+        borderRadius: "4px",
+        background: "rgba(255, 255, 255, 0.08)",
+        overflow: "hidden",
+    });
+
+    const progressFill = createElement("div", {
+        position: "absolute",
+        left: "0",
+        top: "0",
+        height: "8px",
+        borderRadius: "4px",
+        background: "#534AB7",
+        width: `${Math.max(0, Math.min(100, pct))}%`,
+    });
+    progressTrack.appendChild(progressFill);
+
+    if (queue > 0 && pct < 100) {
+        const pendingStripe = createElement("div", {
+            position: "absolute",
+            top: "0",
+            left: `${Math.max(0, Math.min(100, pct))}%`,
+            height: "8px",
+            width: `${Math.max(0, 100 - pct)}%`,
+            backgroundImage:
+                "repeating-linear-gradient(-45deg, rgba(83, 74, 183, 0.18) 0, rgba(83, 74, 183, 0.18) 5.65px, rgba(255,255,255,0.65) 5.65px, rgba(255,255,255,0.65) 11.3px)",
+            backgroundSize: "11.3px 11.3px",
+        });
+        pendingStripe.className = "ft-barber";
+        progressTrack.appendChild(pendingStripe);
+    }
+
+    section.appendChild(progressTrack);
+    return section;
+}
+
+function createTabRow(activeTab, onSwitch) {
+    const row = createElement("div", {
+        display: "flex",
+        alignItems: "stretch",
+        borderBottom: "1px solid rgba(255,255,255,0.12)",
+        padding: "0 16px",
+    });
+
+    const tabs = [
+        { key: "allTime", label: "All time" },
+        { key: "last24Hours", label: "Last 24h" },
+    ];
+
+    for (const tab of tabs) {
+        const isActive = activeTab === tab.key;
+        const button = createElement("button", {
+            flex: "1 1 0",
+            background: "transparent",
+            border: "0",
+            borderBottom: isActive ? "2px solid #534AB7" : "2px solid transparent",
+            color: isActive ? "#f7f9f9" : "rgba(255, 255, 255, 0.4)",
+            padding: "12px 0 10px",
+            fontSize: "13px",
+            fontWeight: "600",
+            cursor: "pointer",
+            borderRadius: "0",
+        });
+        button.type = "button";
+        button.textContent = tab.label;
+        button.addEventListener("click", () => {
+            if (tab.key !== activeTab) {
+                onSwitch(tab.key);
+            }
+        });
+        row.appendChild(button);
+    }
+
+    return row;
 }
 
 function renderStatsPanelBody(panelBody, stats) {
-    const container = createElement("div", {
-        display: "grid",
-        rowGap: "10px",
-    });
-
-    // Support both new payload (allTime/last24Hours) and legacy payload.
-    if (stats?.allTime || stats?.last24Hours) {
-        container.appendChild(createStatsSection("All Time", stats.allTime));
-        container.appendChild(createStatsSection("Last 24 Hours", stats.last24Hours));
-    } else {
-        container.appendChild(createStatsSection("All Time", stats));
-        container.appendChild(createStatsSection("Last 24 Hours", null));
-    }
-
+    const container = createElement("div", {});
+    const allTimeStats = stats?.allTime || stats;
+    container.appendChild(createProgressSection(allTimeStats));
+    container.appendChild(
+        createTabRow(activeStatsTab, (tab) => {
+            activeStatsTab = tab;
+            renderStatsPanelBody(panelBody, stats);
+        })
+    );
+    const activeSectionStats = activeStatsTab === "allTime" ? (stats?.allTime || stats) : (stats?.last24Hours || null);
+    container.appendChild(createMetricsSection(activeSectionStats));
     panelBody.replaceChildren(container);
 }
 
