@@ -8,7 +8,7 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 - Stores captured posts locally first in `chrome.storage.local` (`captured_posts`).
 - Uploads local backlog from the background worker to backend in batches.
 - Retries upload every 5 seconds if backend is unavailable.
-- Stores posts in Postgres via `DATABASE_URL` with dedupe on `user_id + platform + tweet_id`.
+- Stores canonical posts in Postgres via `DATABASE_URL` with dedupe on `platform + tweet_id`, plus per-user links in `user_posts`.
 - Uses a pseudonymous access code stored in `chrome.storage.local` to locate each user's own data.
 - Runs real-time sync labeling in the backend worker.
 - Supports a hosted backend deployment behind `nginx` on port `80`.
