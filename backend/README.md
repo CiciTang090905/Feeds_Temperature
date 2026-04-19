@@ -99,7 +99,7 @@ Political metric keys include:
 - Keep real keys only in the backend env file on the machine that runs the backend.
 - Do not commit `backend/.env` or `backend/.env.local`.
 - Browser users do not receive these keys unless backend code explicitly exposes them.
-- Browser auth now comes from Chrome identity and backend Google ID lookup, not user-visible access codes.
+- Browser auth now comes from Chrome identity and backend Google ID lookup only.
 
 ## Evaluation output
 

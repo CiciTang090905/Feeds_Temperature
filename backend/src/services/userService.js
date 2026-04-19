@@ -3,8 +3,8 @@ const db = require("../db/database");
 async function createUserByGoogleId({ googleId, email, username }) {
     const rows = await db.all(
         `
-            INSERT INTO users (username, token_hash, google_id, email)
-            VALUES ($1, NULL, $2, $3)
+            INSERT INTO users (username, google_id, email)
+            VALUES ($1, $2, $3)
             ON CONFLICT (google_id) DO UPDATE
             SET email = COALESCE(users.email, EXCLUDED.email),
                 username = COALESCE(NULLIF(users.username, ''), EXCLUDED.username)
