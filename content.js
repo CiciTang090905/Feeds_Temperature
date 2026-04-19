@@ -441,9 +441,9 @@ const POLITICAL_METRIC_ROWS = [
 function createMetricRow(label, count, percent, fillColor) {
     const row = createElement("div", {
         display: "grid",
-        gridTemplateColumns: "120px 1fr auto",
+        gridTemplateColumns: "165px minmax(120px, 1fr) 64px",
         alignItems: "center",
-        columnGap: "10px",
+        columnGap: "8px",
         padding: "6px 0",
     });
 
@@ -457,15 +457,15 @@ function createMetricRow(label, count, percent, fillColor) {
     labelEl.textContent = label;
 
     const track = createElement("div", {
-        height: "6px",
-        borderRadius: "3px",
+        height: "8px",
+        borderRadius: "4px",
         background: "rgba(255, 255, 255, 0.06)",
         overflow: "hidden",
     });
 
     const fill = createElement("div", {
-        height: "6px",
-        borderRadius: "3px",
+        height: "8px",
+        borderRadius: "4px",
         background: fillColor,
         width: `${Math.max(0, Math.min(100, Number(percent) || 0))}%`,
     });
@@ -896,7 +896,7 @@ function startPostCapture() {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request?.type === "REFRESH_STATS_PANEL") {
-        refreshStatsPanel().catch(() => {});
+        refreshStatsPanel().catch(() => { });
         sendResponse?.({ ok: true });
         return true;
     }
