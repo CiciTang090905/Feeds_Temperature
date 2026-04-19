@@ -51,23 +51,19 @@ async function loadPopupState() {
     const backendStats = captureStatus.backendStats || {};
     const session = captureStatus.session || null;
 
-    if (!session?.token) {
-        document.getElementById("account-name").textContent = "Sign in required";
-        document.getElementById("account-meta").textContent = "Opening account setup…";
+    if (!session?.googleId) {
+        document.getElementById("account-name").textContent = "Sign into Chrome to use Feed Temperature";
+        document.getElementById("account-meta").textContent = "This extension now signs you in automatically from your Chrome profile.";
         document.getElementById("capture-count").textContent = String(captureStatus.pendingCount ?? 0);
         document.getElementById("uploaded-count").textContent = "Unavailable";
-        document.getElementById("sync-status").textContent = "Sign in required";
-        document.getElementById("backend-meta").textContent = "Your account page is opening so you can enter or create an access code.";
-        document.getElementById("post-list").textContent = "Connect your account to view backend posts.";
-
-        chrome.runtime.sendMessage({ type: "OPEN_OPTIONS_PAGE" });
+        document.getElementById("sync-status").textContent = "Chrome sign-in required";
+        document.getElementById("backend-meta").textContent = "Sign into Chrome in this browser, then refresh.";
+        document.getElementById("post-list").textContent = "Backend posts will appear once Chrome identity is available.";
         return;
     }
 
-    document.getElementById("account-name").textContent = session?.username || "Not signed in";
-    document.getElementById("account-meta").textContent = session?.userId
-        ? `Account #${session.userId}`
-        : "Open settings to enter or create an access code.";
+    document.getElementById("account-name").textContent = session?.username || session?.email || "Authenticated";
+    document.getElementById("account-meta").textContent = session?.email || (session?.userId ? `Account #${session.userId}` : "Authenticated");
 
     document.getElementById("capture-count").textContent = String(captureStatus.pendingCount ?? 0);
     document.getElementById("uploaded-count").textContent = backendStats.count == null ? "Unavailable" : String(backendStats.count);
@@ -81,8 +77,5 @@ async function loadPopupState() {
 }
 
 document.getElementById("refresh-button").addEventListener("click", loadPopupState);
-document.getElementById("settings-button").addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "OPEN_OPTIONS_PAGE" });
-});
 
 loadPopupState();

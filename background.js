@@ -2,9 +2,11 @@ const CAPTURE_STORAGE_KEY = "captured_posts";
 const CAPTURE_STATS_KEY = "capture_stats";
 const SYNC_STATUS_KEY = "capture_sync_status";
 const USER_SESSION_KEY = "user_session";
+const USER_PROFILE_KEY = "user_profile";
 const BACKEND_BATCH_URL = "http://34.207.146.239/api/posts/batch";
 const BACKEND_POSTS_URL = "http://34.207.146.239/api/posts";
 const BACKEND_STATS_URL = "http://34.207.146.239/api/posts/stats";
+const BACKEND_AUTO_LOGIN_URL = "http://34.207.146.239/api/users/auto-login";
 const MAX_BATCH_SIZE = 15;
 const SYNC_RETRY_INTERVAL_MS = 5000;
 
@@ -13,7 +15,9 @@ let retryTimer = null;
 
 chrome.runtime.onInstalled.addListener(() => {
     console.log("Feeds_temperature extension installed");
-    chrome.runtime.openOptionsPage();
+    ensureAuthenticated().catch((error) => {
+        console.warn("Initial authentication failed:", error.message);
+    });
 });
 
 function getStoredPosts() {
@@ -41,46 +45,93 @@ function setCaptureStats(stats) {
     return writeLocal(CAPTURE_STATS_KEY, stats);
 }
 
-function getUserSession() {
-    return readStoredSession();
-}
+async function getGoogleIdentity() {
+    const profile = await new Promise((resolve, reject) => {
+        chrome.identity.getProfileUserInfo({ accountStatus: "ANY" }, (result) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
 
-async function setUserSession(session, persist = true) {
-    if (!session) {
-        await clearUserSession();
-        return;
+            resolve(result || {});
+        });
+    });
+
+    const email = String(profile.email || "").trim();
+    const id = String(profile.id || "").trim();
+
+    if (!id || !email) {
+        return null;
     }
 
-    if (persist) {
-        await writeLocal(USER_SESSION_KEY, session);
-        await removeSession(USER_SESSION_KEY);
-        return;
-    }
-
-    await removeLocal(USER_SESSION_KEY);
-    await writeSession(USER_SESSION_KEY, session);
+    const identity = { email, id };
+    await writeSync(USER_PROFILE_KEY, identity);
+    return identity;
 }
 
-async function clearUserSession() {
+async function ensureAuthenticated() {
+    const identity = await getGoogleIdentity();
+    if (!identity) {
+        await clearStoredSession();
+        return null;
+    }
+
+    const response = await fetch(BACKEND_AUTO_LOGIN_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            googleId: identity.id,
+            email: identity.email,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Backend responded with ${response.status}`);
+    }
+
+    const data = await response.json();
+    const session = {
+        userId: data.userId,
+        username: data.username,
+        email: data.email || identity.email,
+        googleId: identity.id,
+    };
+    await writeSync(USER_SESSION_KEY, session);
+    return session;
+}
+
+async function getUserSession() {
+    const session = await readSync(USER_SESSION_KEY, null);
+    if (session?.googleId) {
+        return session;
+    }
+
+    return ensureAuthenticated();
+}
+
+async function clearStoredSession() {
     await removeLocal(USER_SESSION_KEY);
-    await removeSession(USER_SESSION_KEY);
+    await removeSync(USER_SESSION_KEY);
+    await removeSync(USER_PROFILE_KEY);
 }
 
 async function fetchBackendPostStats() {
     const session = await getUserSession();
-    if (!session?.token) {
+    if (!session?.googleId) {
         return {
             ok: false,
             count: null,
             recentPosts: [],
-            error: "Sign in required",
+            error: "Sign into Chrome to use Feed Temperature",
             unauthorized: true,
         };
     }
 
     try {
         const response = await fetch(BACKEND_POSTS_URL, {
-            headers: buildAuthHeaders(session.token),
+            headers: buildAuthHeaders(session.googleId),
         });
 
         if (response.status === 401) {
@@ -89,7 +140,7 @@ async function fetchBackendPostStats() {
                 ok: false,
                 count: null,
                 recentPosts: [],
-                error: "Sign in required",
+                error: "Sign into Chrome to use Feed Temperature",
                 unauthorized: true,
             };
         }
@@ -116,18 +167,18 @@ async function fetchBackendPostStats() {
 
 async function fetchBackendDashboardStats() {
     const session = await getUserSession();
-    if (!session?.token) {
+    if (!session?.googleId) {
         return {
             ok: false,
             stats: null,
-            error: "Sign in required",
+            error: "Sign into Chrome to use Feed Temperature",
             unauthorized: true,
         };
     }
 
     try {
         const response = await fetch(BACKEND_STATS_URL, {
-            headers: buildAuthHeaders(session.token),
+            headers: buildAuthHeaders(session.googleId),
         });
 
         if (response.status === 401) {
@@ -135,7 +186,7 @@ async function fetchBackendDashboardStats() {
             return {
                 ok: false,
                 stats: null,
-                error: "Sign in required",
+                error: "Sign into Chrome to use Feed Temperature",
                 unauthorized: true,
             };
         }
@@ -168,7 +219,7 @@ async function syncCapturedPosts() {
 
     try {
         const session = await getUserSession();
-        if (!session?.token) {
+        if (!session?.googleId) {
             await setSyncStatus({
                 lastSyncedAt: Date.now(),
                 lastResult: "auth_required",
@@ -195,7 +246,7 @@ async function syncCapturedPosts() {
         const response = await fetch(BACKEND_BATCH_URL, {
             method: "POST",
             headers: {
-                ...buildAuthHeaders(session.token),
+                ...buildAuthHeaders(session.googleId),
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({ posts: batch }),
@@ -203,7 +254,7 @@ async function syncCapturedPosts() {
 
         if (response.status === 401) {
             await handleUnauthorized();
-            throw new Error("Sign in required");
+            throw new Error("Sign into Chrome to use Feed Temperature");
         }
 
         if (!response.ok) {
@@ -253,7 +304,7 @@ async function syncCapturedPosts() {
             totalUploadedCount: captureStats.totalUploadedCount || 0,
             error: error.message,
         });
-        if (error.message !== "Sign in required") {
+        if (error.message !== "Sign into Chrome to use Feed Temperature") {
             scheduleRetry();
         } else {
             clearRetryTimer();
@@ -306,38 +357,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
-    if (request.type === "GET_USER_SESSION") {
-        getUserSession().then((session) => sendResponse({ session })).catch((error) => {
-            sendResponse({ session: null, error: error.message });
-        });
-        return true;
-    }
-
-    if (request.type === "SET_USER_SESSION") {
-        setUserSession(request.session || null, request.persist !== false)
-            .then(() => syncCapturedPosts().catch(() => {}))
+    if (request.type === "CLEAR_SESSION") {
+        clearStoredSession()
             .then(() => sendResponse({ ok: true }))
             .catch((error) => sendResponse({ ok: false, error: error.message }));
         return true;
     }
 
-    if (request.type === "LOG_OUT") {
-        handleUnauthorized()
-            .then(() => sendResponse({ ok: true }))
-            .catch((error) => sendResponse({ ok: false, error: error.message }));
-        return true;
-    }
-
-    if (request.type === "OPEN_OPTIONS_PAGE") {
-        chrome.runtime.openOptionsPage().then(() => sendResponse({ ok: true })).catch((error) => {
-            sendResponse({ ok: false, error: error.message });
-        });
-        return true;
-    }
-
-    if (request.type === "HANDLE_UNAUTHORIZED") {
-        handleUnauthorized()
-            .then(() => sendResponse({ ok: true }))
+    if (request.type === "ENSURE_AUTHENTICATED") {
+        ensureAuthenticated()
+            .then((session) => sendResponse({ ok: Boolean(session), session }))
             .catch((error) => sendResponse({ ok: false, error: error.message }));
         return true;
     }
@@ -369,9 +398,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-function buildAuthHeaders(token) {
+function buildAuthHeaders(googleId) {
     return {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${googleId}`,
     };
 }
 
@@ -400,14 +429,13 @@ function scheduleStatsRefreshes(payload = {}) {
 }
 
 async function handleUnauthorized() {
-    await clearUserSession();
+    await clearStoredSession();
     await setSyncStatus({
         lastSyncedAt: Date.now(),
         lastResult: "auth_required",
         pendingCount: (await getStoredPosts()).length,
     });
     clearRetryTimer();
-    await chrome.runtime.openOptionsPage();
 }
 
 function readLocal(key, fallbackValue) {
@@ -430,45 +458,36 @@ function removeLocal(key) {
     });
 }
 
-function readSession(key, fallbackValue) {
-    if (!chrome.storage.session) {
+function readSync(key, fallbackValue) {
+    if (!chrome.storage.sync) {
         return Promise.resolve(fallbackValue);
     }
 
     return new Promise((resolve) => {
-        chrome.storage.session.get(key, (result) => {
+        chrome.storage.sync.get(key, (result) => {
             resolve(result[key] ?? fallbackValue);
         });
     });
 }
 
-function writeSession(key, value) {
-    if (!chrome.storage.session) {
+function writeSync(key, value) {
+    if (!chrome.storage.sync) {
         return Promise.resolve();
     }
 
     return new Promise((resolve) => {
-        chrome.storage.session.set({ [key]: value }, resolve);
+        chrome.storage.sync.set({ [key]: value }, resolve);
     });
 }
 
-function removeSession(key) {
-    if (!chrome.storage.session) {
+function removeSync(key) {
+    if (!chrome.storage.sync) {
         return Promise.resolve();
     }
 
     return new Promise((resolve) => {
-        chrome.storage.session.remove([key], resolve);
+        chrome.storage.sync.remove([key], resolve);
     });
-}
-
-async function readStoredSession() {
-    const localSession = await readLocal(USER_SESSION_KEY, null);
-    if (localSession) {
-        return localSession;
-    }
-
-    return readSession(USER_SESSION_KEY, null);
 }
 
 syncCapturedPosts().catch(() => {});

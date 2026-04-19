@@ -1,27 +1,30 @@
 const db = require("../db/database");
 
-async function createUser({ username, tokenHash }) {
+async function createUserByGoogleId({ googleId, email, username }) {
     const rows = await db.all(
         `
-            INSERT INTO users (username, token_hash)
-            VALUES ($1, $2)
-            RETURNING id, username
+            INSERT INTO users (username, token_hash, google_id, email)
+            VALUES ($1, NULL, $2, $3)
+            ON CONFLICT (google_id) DO UPDATE
+            SET email = COALESCE(users.email, EXCLUDED.email),
+                username = COALESCE(NULLIF(users.username, ''), EXCLUDED.username)
+            RETURNING id, username, email, google_id, created_at, last_seen
         `,
-        [username, tokenHash]
+        [username, googleId, email]
     );
 
     return mapUser(rows[0]);
 }
 
-async function findUserByTokenHash(tokenHash) {
+async function findUserByGoogleId(googleId) {
     const rows = await db.all(
         `
-            SELECT id, username, created_at, last_seen
+            SELECT id, username, email, google_id, created_at, last_seen
             FROM users
-            WHERE token_hash = $1
+            WHERE google_id = $1
             LIMIT $2
         `,
-        [tokenHash, 1]
+        [googleId, 1]
     );
 
     return mapUser(rows[0] || null);
@@ -44,7 +47,7 @@ async function updateUsername(id, username) {
             UPDATE users
             SET username = $1
             WHERE id = $2
-            RETURNING id, username, created_at, last_seen
+            RETURNING id, username, email, google_id, created_at, last_seen
         `,
         [username, id]
     );
@@ -58,6 +61,8 @@ function mapUser(row) {
     return {
         id: Number(row.id),
         username: row.username,
+        email: row.email || null,
+        googleId: row.google_id || null,
         createdAt: formatTimestamp(row.created_at),
         lastSeen: formatTimestamp(row.last_seen),
     };
@@ -70,8 +75,8 @@ function formatTimestamp(value) {
 }
 
 module.exports = {
-    createUser,
-    findUserByTokenHash,
+    createUserByGoogleId,
+    findUserByGoogleId,
     touchLastSeen,
     updateUsername,
 };

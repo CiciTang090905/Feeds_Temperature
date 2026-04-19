@@ -9,7 +9,7 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 - Uploads local backlog from the background worker to backend in batches.
 - Retries upload every 5 seconds if backend is unavailable.
 - Stores canonical posts in Postgres via `DATABASE_URL` with dedupe on `platform + tweet_id`, plus per-user links in `user_posts`.
-- Uses a pseudonymous access code stored in `chrome.storage.local` to locate each user's own data.
+- Uses the signed-in Chrome profile to auto-create and restore each user's backend account.
 - Runs real-time sync labeling in the backend worker.
 - Supports a hosted backend deployment behind `nginx` on port `80`.
 - Prompt structure is still separated for clarity:
@@ -39,16 +39,14 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 
 - Local backend:
   - `GET http://localhost:3001/health`
-  - `POST http://localhost:3001/api/users/register`
-  - `POST http://localhost:3001/api/users/login`
+  - `POST http://localhost:3001/api/users/auto-login`
   - `PATCH http://localhost:3001/api/users/me`
   - `POST http://localhost:3001/api/posts/batch`
   - `GET http://localhost:3001/api/posts`
   - `GET http://localhost:3001/api/posts/stats`
 - Current hosted backend:
   - `GET http://34.207.146.239/health`
-  - `POST http://34.207.146.239/api/users/register`
-  - `POST http://34.207.146.239/api/users/login`
+  - `POST http://34.207.146.239/api/users/auto-login`
   - `PATCH http://34.207.146.239/api/users/me`
   - `POST http://34.207.146.239/api/posts/batch`
   - `GET http://34.207.146.239/api/posts`
@@ -102,7 +100,7 @@ curl -s http://127.0.0.1:3001/health
 curl -s http://127.0.0.1/health
 ```
 
-End users do not need to set up env files or handle API keys. Those stay on the backend machine only.
+End users do not need to set up env files or handle API keys. They sign in automatically through the Chrome profile already active in the browser.
 
 ## Backend scripts
 

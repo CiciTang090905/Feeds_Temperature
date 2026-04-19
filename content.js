@@ -493,14 +493,13 @@ async function refreshStatsPanel() {
 
     try {
         const status = await getCaptureStatus();
-        if (!status?.session?.token) {
-            panelBody.textContent = "Sign in through the extension settings to view your stats.";
+        if (!status?.session?.googleId) {
+            panelBody.textContent = "Sign into Chrome to use Feed Temperature.";
             return;
         }
 
         if (status?.dashboardStats?.unauthorized) {
-            await handleUnauthorizedSession();
-            panelBody.textContent = "Your access code is missing or invalid. Reconnect in extension settings.";
+            panelBody.textContent = "Sign into Chrome to use Feed Temperature.";
             return;
         }
 
@@ -663,19 +662,3 @@ window.stopPostCapture = function () {
     captureStarted = false;
     console.log("Capture stopped");
 };
-
-function getStoredAccessToken() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get("user_session", (result) => {
-            resolve(result.user_session?.token || "");
-        });
-    });
-}
-
-function handleUnauthorizedSession() {
-    return new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: "HANDLE_UNAUTHORIZED" }, () => {
-            resolve();
-        });
-    });
-}

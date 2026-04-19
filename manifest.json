@@ -4,7 +4,9 @@
     "version": "1.0.0",
     "description": "Capture visible X posts into local extension storage for feed analysis.",
     "permissions": [
-        "storage"
+        "storage",
+        "identity",
+        "identity.email"
     ],
     "action": {
         "default_popup": "popup.html",
@@ -31,7 +33,6 @@
     "background": {
         "service_worker": "background.js"
     },
-    "options_page": "signin.html",
     "host_permissions": [
         "http://34.207.146.239/*",
         "https://x.com/*",

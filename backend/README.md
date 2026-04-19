@@ -35,8 +35,7 @@ Current cloud deployment shape:
 ## Routes
 
 - `GET /health` -> service health.
-- `POST /api/users/register` -> create a pseudonymous account from a generated access code.
-- `POST /api/users/login` -> restore account access from an access code.
+- `POST /api/users/auto-login` -> create or restore a user from the signed-in Chrome profile.
 - `PATCH /api/users/me` -> update the signed-in username.
 - `POST /api/posts/batch` -> ingest a batch of captured posts.
 - `GET /api/posts` -> list stored posts (newest first).
@@ -70,7 +69,7 @@ Political metric keys include:
 - Managed Postgres via `DATABASE_URL`
 - Cross-user deduplication: canonical `posts` are unique on `(platform, tweet_id)`, and `user_posts` tracks which user saw which post
 - `author`, `media`, `quoted_post`, and `label_confidence` are stored as Postgres `JSONB`
-- Posts are scoped to a `users` row and identified by a bearer access code hashed in the backend.
+- Posts are scoped to a `users` row and identified by the Chrome profile's Google ID sent in the bearer header.
 - Real-time sync labeling is the active path.
 - Prompt separation is preserved:
   - HAN prompt
@@ -100,6 +99,7 @@ Political metric keys include:
 - Keep real keys only in the backend env file on the machine that runs the backend.
 - Do not commit `backend/.env` or `backend/.env.local`.
 - Browser users do not receive these keys unless backend code explicitly exposes them.
+- Browser auth now comes from Chrome identity and backend Google ID lookup, not user-visible access codes.
 
 ## Evaluation output
 
