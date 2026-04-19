@@ -201,16 +201,16 @@ function createElement(tagName, styles = {}) {
 }
 
 const METRIC_COLORS = {
-    highlyNegativeArousal: "#E24B4A",
-    political: "#534AB7",
-    partisanAnimosity: "#D85A30",
-    supportUndemocraticPractices: "#BA7517",
-    supportPartisanViolence: "#A32D2D",
-    supportUndemocraticCandidates: "#993556",
-    oppositionToBipartisanCooperation: "#5F5E5A",
-    socialDistrust: "#1D9E75",
-    socialDistance: "#185FA5",
-    biasedEvaluationOfPoliticizedFacts: "#639922",
+    highlyNegativeArousal: "#c44040",
+    political: "#6b63b5",
+    partisanAnimosity: "#b85a3a",
+    supportUndemocraticPractices: "#9a7530",
+    supportPartisanViolence: "#8c3535",
+    supportUndemocraticCandidates: "#7d3a52",
+    oppositionToBipartisanCooperation: "#6b6a65",
+    socialDistrust: "#2a8a68",
+    socialDistance: "#2a6a99",
+    biasedEvaluationOfPoliticizedFacts: "#5a8525",
 };
 
 function ensureStatsPanel() {
@@ -233,8 +233,8 @@ function ensureStatsPanel() {
         borderRadius: "12px",
         background: "rgba(15, 20, 25, 0.97)",
         color: "#f7f9f9",
-        border: "1px solid rgba(255, 255, 255, 0.16)",
-        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.3)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
         zIndex: "2147483647",
         fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
         fontSize: "13px",
@@ -248,8 +248,8 @@ function ensureStatsPanel() {
         justifyContent: "space-between",
         padding: "10px 12px",
         cursor: "grab",
-        background: "rgba(255, 255, 255, 0.06)",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.14)",
+        background: "rgba(255, 255, 255, 0.04)",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
     });
     header.id = STATS_PANEL_HEADER_ID;
 
@@ -441,9 +441,10 @@ const POLITICAL_METRIC_ROWS = [
 function createMetricRow(label, count, percent, fillColor) {
     const row = createElement("div", {
         display: "grid",
-        gridTemplateColumns: "100px 1fr auto",
+        gridTemplateColumns: "120px 1fr auto",
         alignItems: "center",
         columnGap: "10px",
+        padding: "6px 0",
     });
 
     const labelEl = createElement("div", {
@@ -458,7 +459,7 @@ function createMetricRow(label, count, percent, fillColor) {
     const track = createElement("div", {
         height: "6px",
         borderRadius: "3px",
-        background: "rgba(255,255,255,0.08)",
+        background: "rgba(255, 255, 255, 0.06)",
         overflow: "hidden",
     });
 
@@ -473,17 +474,19 @@ function createMetricRow(label, count, percent, fillColor) {
     const valueEl = createElement("div", {
         textAlign: "right",
         whiteSpace: "nowrap",
-        fontFamily: "monospace",
-        fontSize: "11px",
     });
 
     const countSpan = createElement("span", {
         color: "#f7f9f9",
+        fontFamily: "monospace",
+        fontSize: "11px",
     });
     countSpan.textContent = String(Number(count) || 0);
 
     const percentSpan = createElement("span", {
-        color: "rgba(255, 255, 255, 0.4)",
+        color: "rgba(255, 255, 255, 0.35)",
+        fontFamily: "monospace",
+        fontSize: "11px",
     });
     percentSpan.textContent = `(${Number(percent) || 0}%)`;
 
@@ -503,9 +506,8 @@ function createGroupLabel(text) {
         letterSpacing: "0.03em",
         textTransform: "uppercase",
         color: "rgba(255,255,255,0.35)",
-        paddingBottom: "8px",
-        borderBottom: "1px solid rgba(255,255,255,0.12)",
-        marginBottom: "8px",
+        marginTop: "4px",
+        marginBottom: "10px",
     });
     caption.textContent = text;
     return caption;
@@ -514,7 +516,7 @@ function createGroupLabel(text) {
 function createMetricsSection(sectionStats) {
     const container = createElement("section", {
         display: "grid",
-        rowGap: "8px",
+        rowGap: "0",
         padding: "14px 16px 8px",
     });
 
@@ -536,15 +538,15 @@ function createMetricsSection(sectionStats) {
                 metric.label,
                 metricStats.count,
                 metricStats.percent,
-                METRIC_COLORS[metric.key] || "#534AB7"
+                METRIC_COLORS[metric.key] || "#6b63b5"
             )
         );
     }
 
     const divider = createElement("div", {
         height: "1px",
-        background: "rgba(255,255,255,0.12)",
-        margin: "2px 0 4px",
+        background: "rgba(255, 255, 255, 0.08)",
+        margin: "10px 0",
     });
     container.appendChild(divider);
 
@@ -556,7 +558,7 @@ function createMetricsSection(sectionStats) {
                 metric.label,
                 metricStats.count,
                 metricStats.percent,
-                METRIC_COLORS[metric.key] || "#534AB7"
+                METRIC_COLORS[metric.key] || "#6b63b5"
             )
         );
     }
@@ -568,11 +570,13 @@ function createProgressSection(stats) {
     const captured = Number(stats?.totalCaptured) || 0;
     const labeled = Number(stats?.totalPostsWatched) || 0;
     const queue = Math.max(0, captured - labeled);
-    const pct = captured > 0 ? (labeled / captured) * 100 : 100;
+    const effectivePct = captured > 0 ? (labeled / captured) * 100 : 100;
+    const queueOnlyState = labeled === 0 && captured > 0;
+    const pct = queueOnlyState ? 0 : effectivePct;
 
     const section = createElement("section", {
         padding: "14px 16px 12px",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
         display: "grid",
         rowGap: "12px",
     });
@@ -642,7 +646,7 @@ function createProgressSection(stats) {
         position: "relative",
         height: "8px",
         borderRadius: "4px",
-        background: "rgba(255, 255, 255, 0.08)",
+        background: "rgba(255, 255, 255, 0.06)",
         overflow: "hidden",
     });
 
@@ -652,12 +656,12 @@ function createProgressSection(stats) {
         top: "0",
         height: "8px",
         borderRadius: "4px",
-        background: "#534AB7",
+        background: "#6b63b5",
         width: `${Math.max(0, Math.min(100, pct))}%`,
     });
     progressTrack.appendChild(progressFill);
 
-    if (queue > 0 && pct < 100) {
+    if (queue > 0) {
         const pendingStripe = createElement("div", {
             position: "absolute",
             top: "0",
@@ -665,8 +669,8 @@ function createProgressSection(stats) {
             height: "8px",
             width: `${Math.max(0, 100 - pct)}%`,
             backgroundImage:
-                "repeating-linear-gradient(-45deg, rgba(83, 74, 183, 0.18) 0, rgba(83, 74, 183, 0.18) 5.65px, rgba(255,255,255,0.65) 5.65px, rgba(255,255,255,0.65) 11.3px)",
-            backgroundSize: "11.3px 11.3px",
+                "repeating-linear-gradient(-45deg, rgba(107, 99, 181, 0.2) 0, rgba(107, 99, 181, 0.2) 6px, transparent 6px, transparent 12px)",
+            backgroundSize: "12px 12px",
         });
         pendingStripe.className = "ft-barber";
         progressTrack.appendChild(pendingStripe);
@@ -680,7 +684,8 @@ function createTabRow(activeTab, onSwitch) {
     const row = createElement("div", {
         display: "flex",
         alignItems: "stretch",
-        borderBottom: "1px solid rgba(255,255,255,0.12)",
+        marginTop: "8px",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
         padding: "0 16px",
     });
 
@@ -695,11 +700,11 @@ function createTabRow(activeTab, onSwitch) {
             flex: "1 1 0",
             background: "transparent",
             border: "0",
-            borderBottom: isActive ? "2px solid #534AB7" : "2px solid transparent",
-            color: isActive ? "#f7f9f9" : "rgba(255, 255, 255, 0.4)",
-            padding: "12px 0 10px",
+            borderBottom: isActive ? "2px solid #6b63b5" : "2px solid transparent",
+            color: isActive ? "#f7f9f9" : "rgba(255, 255, 255, 0.35)",
+            padding: "10px 0",
             fontSize: "13px",
-            fontWeight: "600",
+            fontWeight: isActive ? "500" : "400",
             cursor: "pointer",
             borderRadius: "0",
         });

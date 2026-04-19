@@ -252,8 +252,7 @@ async function getPostStatsForUser(userId) {
 }
 
 function buildLabeledWhereClause(postAlias = "posts") {
-    const requiredColumns = ["han_label", "is_political"];
-    return requiredColumns.map((column) => `${postAlias}.${column} IS NOT NULL`).join(" AND ");
+    return `${postAlias}.han_label IS NOT NULL`;
 }
 
 function buildUserWhereClause(tableAlias, userId, paramIndex = 1) {
