@@ -1,9 +1,9 @@
 export const shorthands = undefined;
 
 export const up = (pgm) => {
-    pgm.dropIndex("batch_jobs", "status", { name: "idx_batch_jobs_status", ifExists: true });
-    pgm.dropIndex("posts", "stage_b_batch_id", { name: "idx_posts_stage_b_batch", ifExists: true });
-    pgm.dropIndex("posts", "stage_a_batch_id", { name: "idx_posts_stage_a_batch", ifExists: true });
+    pgm.sql("DROP INDEX IF EXISTS idx_batch_jobs_status");
+    pgm.sql("DROP INDEX IF EXISTS idx_posts_stage_b_batch");
+    pgm.sql("DROP INDEX IF EXISTS idx_posts_stage_a_batch");
     pgm.sql("DROP INDEX IF EXISTS idx_posts_stage_b_pending");
     pgm.sql("DROP INDEX IF EXISTS idx_posts_stage_a_pending");
 
