@@ -762,6 +762,35 @@ function initStatsPanelViewportHandlers() {
     window.addEventListener("resize", keepStatsPanelInViewport);
 }
 
+function mergeDashboardStatsWithLocalCapture(stats, captureStatus) {
+    if (!stats || typeof stats !== "object") {
+        return stats;
+    }
+
+    const allTimeStats = stats.allTime || stats;
+    const backendCaptured = Number(allTimeStats?.totalCaptured) || 0;
+    const backendLabeled = Number(allTimeStats?.totalPostsWatched) || 0;
+    const localCaptured = Number(captureStatus?.captureStats?.totalCapturedCount) || 0;
+    const pendingCount = Number(captureStatus?.pendingCount) || 0;
+    const capturedFloorFromQueue = backendLabeled + pendingCount;
+    const mergedCaptured = Math.max(backendCaptured, localCaptured, capturedFloorFromQueue);
+
+    if (stats.allTime) {
+        return {
+            ...stats,
+            allTime: {
+                ...stats.allTime,
+                totalCaptured: mergedCaptured,
+            },
+        };
+    }
+
+    return {
+        ...stats,
+        totalCaptured: mergedCaptured,
+    };
+}
+
 async function refreshStatsPanel() {
     ensureStatsPanel();
     const panelBody = document.getElementById(STATS_PANEL_BODY_ID);
@@ -783,7 +812,8 @@ async function refreshStatsPanel() {
             throw new Error(status?.dashboardStats?.error || "Stats unavailable");
         }
 
-        renderStatsPanelBody(panelBody, status.dashboardStats.stats);
+        const statsWithLocalCapture = mergeDashboardStatsWithLocalCapture(status.dashboardStats.stats, status);
+        renderStatsPanelBody(panelBody, statsWithLocalCapture);
     } catch (error) {
         panelBody.textContent = "Stats unavailable. Check whether the hosted backend is reachable.";
     }

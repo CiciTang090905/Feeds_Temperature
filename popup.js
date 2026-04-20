@@ -78,4 +78,10 @@ async function loadPopupState() {
 
 document.getElementById("refresh-button").addEventListener("click", loadPopupState);
 
+chrome.runtime.onMessage.addListener((request) => {
+    if (request?.type === "REFRESH_STATS_PANEL") {
+        loadPopupState().catch(() => {});
+    }
+});
+
 loadPopupState();

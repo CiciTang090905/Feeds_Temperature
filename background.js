@@ -380,11 +380,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.type === "RECORD_CAPTURE_ACTIVITY") {
         getCaptureStats()
-            .then((stats) => setCaptureStats({
-                ...stats,
-                totalCapturedCount: (stats.totalCapturedCount || 0) + (request.capturedCount || 0),
-                lastCapturedAt: request.lastCapturedAt || stats.lastCapturedAt,
-            }))
+            .then((stats) => {
+                const updatedStats = {
+                    ...stats,
+                    totalCapturedCount: (stats.totalCapturedCount || 0) + (request.capturedCount || 0),
+                    lastCapturedAt: request.lastCapturedAt || stats.lastCapturedAt,
+                };
+
+                return setCaptureStats(updatedStats).then(async () => {
+                    const pendingCount = (await getStoredPosts()).length;
+                    broadcastStatsRefresh({
+                        reason: "capture_activity",
+                        capturedCount: request.capturedCount || 0,
+                        pendingCount,
+                        totalCapturedCount: updatedStats.totalCapturedCount,
+                    });
+                });
+            })
             .then(() => sendResponse({ ok: true }))
             .catch((error) => sendResponse({ ok: false, error: error.message }));
         return true;
