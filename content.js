@@ -877,8 +877,12 @@ function createColorLegend() {
         lineHeight: "1",
         paddingBottom: "2px",
     });
-    scaleLabels.appendChild(document.createTextNode("Low"));
-    scaleLabels.appendChild(document.createTextNode("High"));
+    const lowLabel = createElement("span");
+    lowLabel.textContent = "Low";
+    const highLabel = createElement("span");
+    highLabel.textContent = "High";
+    scaleLabels.appendChild(lowLabel);
+    scaleLabels.appendChild(highLabel);
 
     const bar = createElement("div", {
         position: "relative",
