@@ -4,7 +4,7 @@ const STATS_PANEL_HEADER_ID = "feeds-temperature-stats-panel-header";
 const STATS_PANEL_BODY_ID = "feeds-temperature-stats-panel-body";
 const STATS_PANEL_TOGGLE_ID = "feeds-temperature-stats-panel-toggle";
 const STATS_REFRESH_MS = 10000;
-const PANEL_DEFAULT_HEIGHT = "520px";
+const PANEL_DEFAULT_HEIGHT = "720px";
 const PANEL_DEFAULT_MIN_HEIGHT = "180px";
 const FEED_TEMPERATURE_PANEL_STYLE_ID = "feeds-temperature-panel-style";
 const capturedIds = new Set();
@@ -200,17 +200,51 @@ function createElement(tagName, styles = {}) {
     return element;
 }
 
-const METRIC_COLORS = {
-    highlyNegativeArousal: "#c44040",
-    political: "#6b63b5",
-    partisanAnimosity: "#b85a3a",
-    supportUndemocraticPractices: "#9a7530",
-    supportPartisanViolence: "#8c3535",
-    supportUndemocraticCandidates: "#7d3a52",
-    oppositionToBipartisanCooperation: "#6b6a65",
-    socialDistrust: "#2a8a68",
-    socialDistance: "#2a6a99",
-    biasedEvaluationOfPoliticizedFacts: "#5a8525",
+const METRIC_BASELINES = {
+    highlyNegativeArousal: 10,
+    political: 20,
+    partisanAnimosity: 10,
+    supportUndemocraticPractices: 3,
+    supportPartisanViolence: 3,
+    supportUndemocraticCandidates: 3,
+    oppositionToBipartisanCooperation: 5,
+    socialDistrust: 8,
+    socialDistance: 8,
+    biasedEvaluationOfPoliticizedFacts: 10,
+};
+
+const METRIC_DEFINITIONS = {
+    highlyNegativeArousal:
+        "Activated, intense negativity directed at someone: anger, rage, outrage, hostility, insults, aggressive blame.",
+    political: "Content about civic, ideological, governmental, electoral, legal, public-policy, or public-affairs topics.",
+    partisanAnimosity: "Dislike for opposing partisans: hostility directed at members of the other political party.",
+    biasedEvaluationOfPoliticizedFacts:
+        "Skepticism of facts that favor the worldview of the other party: partially presenting political facts with a partisan stance.",
+    socialDistance:
+        "Resistance to interpersonal contact with outpartisans: language that increases distrust, hate, prejudice, or discrimination.",
+    socialDistrust: "Distrust of people in general: generalized skepticism about others' intentions and reliability.",
+    supportPartisanViolence:
+        "Willingness to use violent tactics against outpartisans: threatening, intimidating, or endorsing violence for political goals.",
+    supportUndemocraticPractices:
+        "Willingness to forgo democratic principles for partisan gain: attacking judicial independence, undermining free press, challenging election legitimacy.",
+    supportUndemocraticCandidates: "Willingness to ignore democratic practices to elect in-party candidates.",
+    oppositionToBipartisanCooperation: "Resistance to cross-partisan collaboration: opposing cooperation between political parties.",
+};
+
+const COLOR_STOPS = [
+    { p: 0.00, r: 93, g: 202, b: 165 },
+    { p: 0.25, r: 151, g: 196, b: 89 },
+    { p: 0.45, r: 250, g: 199, b: 117 },
+    { p: 0.65, r: 239, g: 159, b: 39 },
+    { p: 0.85, r: 226, g: 75, b: 74 },
+    { p: 1.00, r: 163, g: 45, b: 45 },
+];
+
+const SEVERITY_STYLES = {
+    below: { label: "Below avg", color: "#5DCAA5", background: "rgba(93, 202, 165, 0.16)" },
+    normal: { label: "Normal", color: "#97C459", background: "rgba(151, 196, 89, 0.16)" },
+    elevated: { label: "Elevated", color: "#EF9F27", background: "rgba(239, 159, 39, 0.18)" },
+    high: { label: "High", color: "#E24B4A", background: "rgba(226, 75, 74, 0.18)" },
 };
 
 function ensureStatsPanel() {
@@ -360,6 +394,26 @@ function injectPanelStyles(panel) {
             0% { background-position: 0 0; }
             100% { background-position: 11.3px 0; }
         }
+        #${STATS_PANEL_ID} .ft-gauge-card {
+            transition: border-color 140ms ease, background 140ms ease;
+        }
+        #${STATS_PANEL_ID} .ft-gauge-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.055);
+        }
+        #${STATS_PANEL_ID} .ft-label-wrap:hover .ft-tooltip {
+            display: block;
+        }
+        #${STATS_PANEL_ID} .ft-tooltip::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -6px;
+            transform: translateX(-50%);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid rgba(0, 0, 0, 0.94);
+        }
         .ft-pulse-green { animation: ft-pulse-green 2s ease-in-out infinite; }
         .ft-pulse-amber { animation: ft-pulse-amber 1.5s ease-in-out infinite; }
         .ft-barber { animation: ft-barber 0.8s linear infinite; }
@@ -438,67 +492,6 @@ const POLITICAL_METRIC_ROWS = [
     { key: "biasedEvaluationOfPoliticizedFacts", label: "Biased fact eval" },
 ];
 
-function createMetricRow(label, count, percent, fillColor) {
-    const row = createElement("div", {
-        display: "grid",
-        gridTemplateColumns: "165px minmax(120px, 1fr) 64px",
-        alignItems: "center",
-        columnGap: "8px",
-        padding: "6px 0",
-    });
-
-    const labelEl = createElement("div", {
-        fontSize: "12px",
-        color: "rgba(255, 255, 255, 0.65)",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-    });
-    labelEl.textContent = label;
-
-    const track = createElement("div", {
-        height: "8px",
-        borderRadius: "4px",
-        background: "rgba(255, 255, 255, 0.06)",
-        overflow: "hidden",
-    });
-
-    const fill = createElement("div", {
-        height: "8px",
-        borderRadius: "4px",
-        background: fillColor,
-        width: `${Math.max(0, Math.min(100, Number(percent) || 0))}%`,
-    });
-    track.appendChild(fill);
-
-    const valueEl = createElement("div", {
-        textAlign: "right",
-        whiteSpace: "nowrap",
-    });
-
-    const countSpan = createElement("span", {
-        color: "#f7f9f9",
-        fontFamily: "monospace",
-        fontSize: "11px",
-    });
-    countSpan.textContent = String(Number(count) || 0);
-
-    const percentSpan = createElement("span", {
-        color: "rgba(255, 255, 255, 0.35)",
-        fontFamily: "monospace",
-        fontSize: "11px",
-    });
-    percentSpan.textContent = `(${Number(percent) || 0}%)`;
-
-    valueEl.appendChild(countSpan);
-    valueEl.appendChild(percentSpan);
-
-    row.appendChild(labelEl);
-    row.appendChild(track);
-    row.appendChild(valueEl);
-    return row;
-}
-
 function createGroupLabel(text) {
     const caption = createElement("div", {
         fontSize: "11px",
@@ -513,11 +506,369 @@ function createGroupLabel(text) {
     return caption;
 }
 
+function interpolateColor(t) {
+    const clamped = clamp(Number(t) || 0, 0, 1);
+    const nextIndex = COLOR_STOPS.findIndex((stop) => stop.p >= clamped);
+    if (nextIndex <= 0) return `rgb(${COLOR_STOPS[0].r}, ${COLOR_STOPS[0].g}, ${COLOR_STOPS[0].b})`;
+
+    const start = COLOR_STOPS[nextIndex - 1];
+    const end = COLOR_STOPS[nextIndex] || COLOR_STOPS[COLOR_STOPS.length - 1];
+    const localT = end.p === start.p ? 0 : (clamped - start.p) / (end.p - start.p);
+    const r = Math.round(start.r + (end.r - start.r) * localT);
+    const g = Math.round(start.g + (end.g - start.g) * localT);
+    const b = Math.round(start.b + (end.b - start.b) * localT);
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+function polarToPoint(cx, cy, radius, angleDeg) {
+    const angle = (angleDeg * Math.PI) / 180;
+    return {
+        x: cx + radius * Math.cos(angle),
+        y: cy + radius * Math.sin(angle),
+    };
+}
+
+function describeArc(cx, cy, radius, startDeg, endDeg) {
+    const start = polarToPoint(cx, cy, radius, startDeg);
+    const end = polarToPoint(cx, cy, radius, endDeg);
+    const largeArcFlag = Math.abs(endDeg - startDeg) <= 180 ? "0" : "1";
+    return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+}
+
+function createSvgElement(tagName, attributes = {}) {
+    const element = document.createElementNS("http://www.w3.org/2000/svg", tagName);
+    for (const [key, value] of Object.entries(attributes)) {
+        element.setAttribute(key, String(value));
+    }
+    return element;
+}
+
+function getMetricPosition(value, baseline) {
+    const maxVal = Math.max(1, baseline * 3.5);
+    return clamp((Number(value) || 0) / maxVal, 0, 1);
+}
+
+function getSeverity(value, baseline) {
+    const numericValue = Number(value) || 0;
+    if (numericValue < baseline * 0.75) return "below";
+    if (numericValue <= baseline * 1.25) return "normal";
+    if (numericValue <= baseline * 1.75) return "elevated";
+    return "high";
+}
+
+function getAverageDeltaText(value, baseline) {
+    const numericValue = Number(value) || 0;
+    if (!baseline) return "";
+
+    const delta = Math.round(((numericValue - baseline) / baseline) * 100);
+    if (delta > 0) return `${delta}% above avg`;
+    if (delta < 0) return `${Math.abs(delta)}% below avg`;
+    return "0% above avg";
+}
+
+function getMetricContextText(value, baseline, severity) {
+    const numericValue = Number(value) || 0;
+    const deltaText = getAverageDeltaText(numericValue, baseline);
+
+    if (severity === "high" && numericValue > 0) {
+        const inverse = Math.max(1, Math.round(100 / numericValue));
+        return `1 in ${inverse} posts | ${deltaText}`;
+    }
+
+    if (numericValue === 0) return `None detected | ${deltaText}`;
+    if (severity === "normal") return `Within normal range | ${deltaText}`;
+    return deltaText;
+}
+
+function formatMetricPercent(percent) {
+    const value = Number(percent) || 0;
+    return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
+}
+
+function createGaugeSvg(value, baseline) {
+    const svg = createSvgElement("svg", {
+        viewBox: "0 0 110 74",
+        width: "110",
+        height: "74",
+        role: "img",
+        "aria-hidden": "true",
+    });
+
+    const cx = 55;
+    const cy = 48;
+    const radius = 34;
+    const startDeg = -210;
+    const sweepDeg = 240;
+    const segments = 40;
+    const position = getMetricPosition(value, baseline);
+    const needleAngle = startDeg + position * sweepDeg;
+    const needleColor = interpolateColor(position);
+
+    for (let i = 0; i < segments; i++) {
+        const segmentStart = startDeg + (i / segments) * sweepDeg;
+        const segmentEnd = startDeg + ((i + 0.72) / segments) * sweepDeg;
+        const path = createSvgElement("path", {
+            d: describeArc(cx, cy, radius, segmentStart, segmentEnd),
+            fill: "none",
+            stroke: interpolateColor(i / (segments - 1)),
+            "stroke-width": "7",
+            "stroke-linecap": "round",
+            opacity: "0.78",
+        });
+        svg.appendChild(path);
+    }
+
+    const baselinePosition = getMetricPosition(baseline, baseline);
+    const baselineAngle = startDeg + baselinePosition * sweepDeg;
+    const tickOuter = polarToPoint(cx, cy, radius + 5, baselineAngle);
+    const tickInner = polarToPoint(cx, cy, radius - 6, baselineAngle);
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: tickInner.x.toFixed(2),
+            y1: tickInner.y.toFixed(2),
+            x2: tickOuter.x.toFixed(2),
+            y2: tickOuter.y.toFixed(2),
+            stroke: "rgba(255, 255, 255, 0.72)",
+            "stroke-width": "1.3",
+            "stroke-linecap": "round",
+        })
+    );
+
+    const labelPoint = polarToPoint(cx, cy, radius + 12, baselineAngle);
+    const baselineLabel = createSvgElement("text", {
+        x: labelPoint.x.toFixed(2),
+        y: labelPoint.y.toFixed(2),
+        fill: "rgba(255, 255, 255, 0.48)",
+        "font-size": "7",
+        "text-anchor": "middle",
+        "dominant-baseline": "middle",
+    });
+    baselineLabel.textContent = `${formatMetricPercent(baseline)}%`;
+    svg.appendChild(baselineLabel);
+
+    const needleEnd = polarToPoint(cx, cy, 24, needleAngle);
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: cx,
+            y1: cy,
+            x2: needleEnd.x.toFixed(2),
+            y2: needleEnd.y.toFixed(2),
+            stroke: needleColor,
+            "stroke-width": "2.2",
+            "stroke-linecap": "round",
+        })
+    );
+    svg.appendChild(createSvgElement("circle", { cx, cy, r: "4", fill: needleColor }));
+    svg.appendChild(createSvgElement("circle", { cx, cy, r: "1.8", fill: "rgba(15, 20, 25, 0.97)" }));
+
+    return { svg, color: needleColor };
+}
+
+function createGaugeCard(metric, metricStats) {
+    const value = Number(metricStats?.percent) || 0;
+    const count = Number(metricStats?.count) || 0;
+    const baseline = METRIC_BASELINES[metric.key] || 10;
+    const severity = getSeverity(value, baseline);
+    const severityStyle = SEVERITY_STYLES[severity];
+    const { svg, color } = createGaugeSvg(value, baseline);
+
+    const card = createElement("article", {
+        minWidth: "0",
+        background: "rgba(255, 255, 255, 0.04)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        borderRadius: "10px",
+        padding: "8px 8px 10px",
+        display: "grid",
+        justifyItems: "center",
+        rowGap: "3px",
+        textAlign: "center",
+    });
+    card.className = "ft-gauge-card";
+
+    const countEl = createElement("div", {
+        width: "100%",
+        color: "rgba(255, 255, 255, 0.42)",
+        fontSize: "10px",
+        fontWeight: "600",
+        lineHeight: "1.2",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+    });
+    countEl.textContent = `${count} posts classified`;
+
+    const labelWrap = createElement("div", {
+        position: "relative",
+        maxWidth: "100%",
+        color: "rgba(255, 255, 255, 0.7)",
+        fontSize: "11px",
+        lineHeight: "1.2",
+        textDecoration: "underline dotted rgba(255, 255, 255, 0.35)",
+        textUnderlineOffset: "3px",
+        cursor: "help",
+        whiteSpace: "normal",
+    });
+    labelWrap.className = "ft-label-wrap";
+    labelWrap.textContent = metric.label;
+
+    const tooltip = createElement("div", {
+        display: "none",
+        position: "absolute",
+        left: "50%",
+        bottom: "calc(100% + 8px)",
+        transform: "translateX(-50%)",
+        width: "200px",
+        boxSizing: "border-box",
+        padding: "8px 9px",
+        borderRadius: "7px",
+        background: "rgba(0, 0, 0, 0.94)",
+        border: "1px solid rgba(255, 255, 255, 0.18)",
+        color: "rgba(255, 255, 255, 0.84)",
+        fontSize: "11px",
+        lineHeight: "1.35",
+        textAlign: "left",
+        zIndex: "2",
+        pointerEvents: "none",
+    });
+    tooltip.className = "ft-tooltip";
+    tooltip.textContent = METRIC_DEFINITIONS[metric.key] || "";
+    labelWrap.appendChild(tooltip);
+
+    const valueEl = createElement("div", {
+        color,
+        fontFamily: "monospace",
+        fontSize: "18px",
+        fontWeight: "700",
+        lineHeight: "1",
+    });
+    valueEl.textContent = `${formatMetricPercent(value)}%`;
+
+    const contextEl = createElement("div", {
+        minHeight: "24px",
+        color: "rgba(255, 255, 255, 0.38)",
+        fontSize: "10px",
+        fontWeight: "600",
+        lineHeight: "1.2",
+        maxWidth: "112px",
+    });
+    contextEl.textContent = getMetricContextText(value, baseline, severity);
+
+    const badge = createElement("div", {
+        padding: "2px 6px",
+        borderRadius: "5px",
+        background: severityStyle.background,
+        color: severityStyle.color,
+        fontSize: "9px",
+        fontWeight: "700",
+        lineHeight: "1.1",
+    });
+    badge.textContent = severityStyle.label;
+
+    card.appendChild(countEl);
+    card.appendChild(svg);
+    card.appendChild(labelWrap);
+    card.appendChild(valueEl);
+    card.appendChild(contextEl);
+    card.appendChild(badge);
+    return card;
+}
+
+function createGaugeGrid(metrics, getStats) {
+    const grid = createElement("div", {
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+        gap: "8px",
+    });
+
+    const sortedMetrics = metrics
+        .map((metric) => ({ metric, stats: getStats(metric.key) || {} }))
+        .sort((a, b) => (Number(b.stats.percent) || 0) - (Number(a.stats.percent) || 0));
+
+    for (const item of sortedMetrics) {
+        grid.appendChild(createGaugeCard(item.metric, item.stats));
+    }
+
+    return grid;
+}
+
+function createColorLegend() {
+    const legend = createElement("section", {
+        padding: "8px 16px 4px",
+        display: "grid",
+        rowGap: "5px",
+    });
+
+    const scaleLabels = createElement("div", {
+        display: "flex",
+        justifyContent: "space-between",
+        color: "rgba(255, 255, 255, 0.4)",
+        fontSize: "10px",
+        lineHeight: "1",
+    });
+    scaleLabels.appendChild(document.createTextNode("Low"));
+    scaleLabels.appendChild(document.createTextNode("High"));
+
+    const bar = createElement("div", {
+        position: "relative",
+        height: "6px",
+        borderRadius: "999px",
+        background:
+            "linear-gradient(90deg, rgb(93, 202, 165), rgb(151, 196, 89), rgb(250, 199, 117), rgb(239, 159, 39), rgb(226, 75, 74), rgb(163, 45, 45))",
+    });
+    const tick = createElement("div", {
+        position: "absolute",
+        left: "28.6%",
+        top: "-3px",
+        width: "1px",
+        height: "12px",
+        background: "rgba(255, 255, 255, 0.72)",
+    });
+    const tickLabel = createElement("div", {
+        position: "absolute",
+        left: "28.6%",
+        top: "10px",
+        transform: "translateX(-50%)",
+        color: "rgba(255, 255, 255, 0.44)",
+        fontSize: "8px",
+        whiteSpace: "nowrap",
+    });
+    tickLabel.textContent = "Baseline (avg)";
+    bar.appendChild(tick);
+    bar.appendChild(tickLabel);
+
+    const zoneRow = createElement("div", {
+        display: "grid",
+        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+        columnGap: "2px",
+        marginTop: "13px",
+        color: "rgba(255, 255, 255, 0.32)",
+        fontSize: "8px",
+        fontWeight: "700",
+        textAlign: "center",
+    });
+
+    for (const label of ["Below avg", "Normal", "Elevated", "High"]) {
+        const zone = createElement("div", {
+            borderLeft: "1px solid rgba(255, 255, 255, 0.16)",
+            borderRight: "1px solid rgba(255, 255, 255, 0.16)",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.16)",
+            paddingTop: "5px",
+        });
+        zone.textContent = label;
+        zoneRow.appendChild(zone);
+    }
+
+    legend.appendChild(scaleLabels);
+    legend.appendChild(bar);
+    legend.appendChild(zoneRow);
+    return legend;
+}
+
 function createMetricsSection(sectionStats) {
     const container = createElement("section", {
         display: "grid",
-        rowGap: "0",
-        padding: "14px 16px 8px",
+        rowGap: "8px",
+        padding: "10px 16px 10px",
     });
 
     if (!sectionStats || !sectionStats.allPosts || !sectionStats.politicalPosts) {
@@ -531,37 +882,17 @@ function createMetricsSection(sectionStats) {
     }
 
     container.appendChild(createGroupLabel("% of all posts"));
-    for (const metric of ALL_POST_ROWS) {
-        const metricStats = sectionStats.allPosts?.[metric.key] || {};
-        container.appendChild(
-            createMetricRow(
-                metric.label,
-                metricStats.count,
-                metricStats.percent,
-                METRIC_COLORS[metric.key] || "#6b63b5"
-            )
-        );
-    }
+    container.appendChild(createGaugeGrid(ALL_POST_ROWS, (key) => sectionStats.allPosts?.[key]));
 
     const divider = createElement("div", {
         height: "1px",
         background: "rgba(255, 255, 255, 0.08)",
-        margin: "10px 0",
+        margin: "4px 0 0",
     });
     container.appendChild(divider);
 
     container.appendChild(createGroupLabel("% of political posts"));
-    for (const metric of POLITICAL_METRIC_ROWS) {
-        const metricStats = sectionStats.politicalPosts?.metrics?.[metric.key] || {};
-        container.appendChild(
-            createMetricRow(
-                metric.label,
-                metricStats.count,
-                metricStats.percent,
-                METRIC_COLORS[metric.key] || "#6b63b5"
-            )
-        );
-    }
+    container.appendChild(createGaugeGrid(POLITICAL_METRIC_ROWS, (key) => sectionStats.politicalPosts?.metrics?.[key]));
 
     return container;
 }
@@ -731,6 +1062,7 @@ function renderStatsPanelBody(panelBody, stats) {
             renderStatsPanelBody(panelBody, stats);
         })
     );
+    container.appendChild(createColorLegend());
     const activeSectionStats = activeStatsTab === "allTime" ? (stats?.allTime || stats) : (stats?.last24Hours || null);
     container.appendChild(createMetricsSection(activeSectionStats));
     panelBody.replaceChildren(container);
