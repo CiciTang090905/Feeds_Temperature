@@ -3,6 +3,7 @@ const STATS_PANEL_ID = "feeds-temperature-stats-panel";
 const STATS_PANEL_HEADER_ID = "feeds-temperature-stats-panel-header";
 const STATS_PANEL_BODY_ID = "feeds-temperature-stats-panel-body";
 const STATS_PANEL_TOGGLE_ID = "feeds-temperature-stats-panel-toggle";
+const STATS_PANEL_TOOLTIP_ID = "feeds-temperature-stats-panel-tooltip";
 const STATS_REFRESH_MS = 10000;
 const PANEL_DEFAULT_HEIGHT = "720px";
 const PANEL_DEFAULT_MIN_HEIGHT = "180px";
@@ -258,7 +259,7 @@ function ensureStatsPanel() {
         width: "320px",
         height: PANEL_DEFAULT_HEIGHT,
         maxHeight: "80vh",
-        minWidth: "260px",
+        minWidth: "280px",
         minHeight: PANEL_DEFAULT_MIN_HEIGHT,
         display: "flex",
         flexDirection: "column",
@@ -273,6 +274,7 @@ function ensureStatsPanel() {
         fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
         fontSize: "13px",
         lineHeight: "1.45",
+        containerType: "inline-size",
     });
     panel.id = STATS_PANEL_ID;
 
@@ -401,10 +403,14 @@ function injectPanelStyles(panel) {
             border-color: rgba(255, 255, 255, 0.2);
             background: rgba(255, 255, 255, 0.055);
         }
-        #${STATS_PANEL_ID} .ft-label-wrap:hover .ft-tooltip {
-            display: block;
+        #${STATS_PANEL_ID} .ft-gauge-grid {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         }
-        #${STATS_PANEL_ID} .ft-tooltip::after {
+        #${STATS_PANEL_ID} .ft-gauge-svg {
+            width: min(110px, 100%);
+            height: auto;
+        }
+        #${STATS_PANEL_TOOLTIP_ID}::after {
             content: "";
             position: absolute;
             left: 50%;
@@ -413,6 +419,32 @@ function injectPanelStyles(panel) {
             border-left: 6px solid transparent;
             border-right: 6px solid transparent;
             border-top: 6px solid rgba(0, 0, 0, 0.94);
+        }
+        @container (max-width: 315px) {
+            #${STATS_PANEL_ID} .ft-gauge-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            #${STATS_PANEL_ID} .ft-gauge-card {
+                padding: 9px 10px 10px;
+            }
+        }
+        @container (max-width: 295px) {
+            #${STATS_PANEL_ID} .ft-metric-count {
+                font-size: 9px;
+            }
+            #${STATS_PANEL_ID} .ft-metric-label {
+                font-size: 10px;
+            }
+            #${STATS_PANEL_ID} .ft-metric-value {
+                font-size: 17px;
+            }
+            #${STATS_PANEL_ID} .ft-metric-context {
+                max-width: 100%;
+                font-size: 9px;
+            }
+            #${STATS_PANEL_ID} .ft-zone-label {
+                font-size: 7px;
+            }
         }
         .ft-pulse-green { animation: ft-pulse-green 2s ease-in-out infinite; }
         .ft-pulse-amber { animation: ft-pulse-amber 1.5s ease-in-out infinite; }
@@ -506,6 +538,56 @@ function createGroupLabel(text) {
     return caption;
 }
 
+function ensureStatsTooltip() {
+    let tooltip = document.getElementById(STATS_PANEL_TOOLTIP_ID);
+    if (tooltip) return tooltip;
+
+    tooltip = createElement("div", {
+        position: "fixed",
+        display: "none",
+        width: "210px",
+        boxSizing: "border-box",
+        padding: "8px 9px",
+        borderRadius: "7px",
+        background: "rgba(0, 0, 0, 0.94)",
+        border: "1px solid rgba(255, 255, 255, 0.18)",
+        color: "rgba(255, 255, 255, 0.86)",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+        fontSize: "11px",
+        lineHeight: "1.35",
+        textAlign: "left",
+        zIndex: "2147483647",
+        pointerEvents: "none",
+        boxShadow: "0 8px 18px rgba(0, 0, 0, 0.42)",
+    });
+    tooltip.id = STATS_PANEL_TOOLTIP_ID;
+    document.body.appendChild(tooltip);
+    return tooltip;
+}
+
+function showMetricTooltip(anchor, definition) {
+    if (!definition) return;
+
+    const tooltip = ensureStatsTooltip();
+    tooltip.textContent = definition;
+    tooltip.style.display = "block";
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const top = Math.max(8, anchorRect.top - tooltipRect.height - 10);
+    const centeredLeft = anchorRect.left + anchorRect.width / 2 - tooltipRect.width / 2;
+    const left = clamp(centeredLeft, 8, window.innerWidth - tooltipRect.width - 8);
+
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+}
+
+function hideMetricTooltip() {
+    const tooltip = document.getElementById(STATS_PANEL_TOOLTIP_ID);
+    if (!tooltip) return;
+    tooltip.style.display = "none";
+}
+
 function interpolateColor(t) {
     const clamped = clamp(Number(t) || 0, 0, 1);
     const nextIndex = COLOR_STOPS.findIndex((stop) => stop.p >= clamped);
@@ -593,6 +675,7 @@ function createGaugeSvg(value, baseline) {
         role: "img",
         "aria-hidden": "true",
     });
+    svg.classList.add("ft-gauge-svg");
 
     const cx = 55;
     const cy = 48;
@@ -695,6 +778,7 @@ function createGaugeCard(metric, metricStats) {
         overflow: "hidden",
         textOverflow: "ellipsis",
     });
+    countEl.className = "ft-metric-count";
     countEl.textContent = `${count} posts classified`;
 
     const labelWrap = createElement("div", {
@@ -705,34 +789,19 @@ function createGaugeCard(metric, metricStats) {
         lineHeight: "1.2",
         textDecoration: "underline dotted rgba(255, 255, 255, 0.35)",
         textUnderlineOffset: "3px",
-        cursor: "help",
+        cursor: "default",
         whiteSpace: "normal",
     });
-    labelWrap.className = "ft-label-wrap";
+    labelWrap.className = "ft-label-wrap ft-metric-label";
     labelWrap.textContent = metric.label;
-
-    const tooltip = createElement("div", {
-        display: "none",
-        position: "absolute",
-        left: "50%",
-        bottom: "calc(100% + 8px)",
-        transform: "translateX(-50%)",
-        width: "200px",
-        boxSizing: "border-box",
-        padding: "8px 9px",
-        borderRadius: "7px",
-        background: "rgba(0, 0, 0, 0.94)",
-        border: "1px solid rgba(255, 255, 255, 0.18)",
-        color: "rgba(255, 255, 255, 0.84)",
-        fontSize: "11px",
-        lineHeight: "1.35",
-        textAlign: "left",
-        zIndex: "2",
-        pointerEvents: "none",
+    labelWrap.addEventListener("mouseenter", () => {
+        showMetricTooltip(labelWrap, METRIC_DEFINITIONS[metric.key]);
     });
-    tooltip.className = "ft-tooltip";
-    tooltip.textContent = METRIC_DEFINITIONS[metric.key] || "";
-    labelWrap.appendChild(tooltip);
+    labelWrap.addEventListener("mousemove", () => {
+        showMetricTooltip(labelWrap, METRIC_DEFINITIONS[metric.key]);
+    });
+    labelWrap.addEventListener("mouseleave", hideMetricTooltip);
+    labelWrap.addEventListener("blur", hideMetricTooltip);
 
     const valueEl = createElement("div", {
         color,
@@ -741,6 +810,7 @@ function createGaugeCard(metric, metricStats) {
         fontWeight: "700",
         lineHeight: "1",
     });
+    valueEl.className = "ft-metric-value";
     valueEl.textContent = `${formatMetricPercent(value)}%`;
 
     const contextEl = createElement("div", {
@@ -751,6 +821,7 @@ function createGaugeCard(metric, metricStats) {
         lineHeight: "1.2",
         maxWidth: "112px",
     });
+    contextEl.className = "ft-metric-context";
     contextEl.textContent = getMetricContextText(value, baseline, severity);
 
     const badge = createElement("div", {
@@ -776,9 +847,9 @@ function createGaugeCard(metric, metricStats) {
 function createGaugeGrid(metrics, getStats) {
     const grid = createElement("div", {
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
         gap: "8px",
     });
+    grid.className = "ft-gauge-grid";
 
     const sortedMetrics = metrics
         .map((metric) => ({ metric, stats: getStats(metric.key) || {} }))
@@ -804,6 +875,7 @@ function createColorLegend() {
         color: "rgba(255, 255, 255, 0.4)",
         fontSize: "10px",
         lineHeight: "1",
+        paddingBottom: "2px",
     });
     scaleLabels.appendChild(document.createTextNode("Low"));
     scaleLabels.appendChild(document.createTextNode("High"));
@@ -838,7 +910,7 @@ function createColorLegend() {
 
     const zoneRow = createElement("div", {
         display: "grid",
-        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+        gridTemplateColumns: "0.75fr 0.5fr 0.5fr 1.75fr",
         columnGap: "2px",
         marginTop: "13px",
         color: "rgba(255, 255, 255, 0.32)",
@@ -847,14 +919,27 @@ function createColorLegend() {
         textAlign: "center",
     });
 
-    for (const label of ["Below avg", "Normal", "Elevated", "High"]) {
+    const zones = [
+        { label: "Below avg", title: "0-75% of avg" },
+        { label: "Normal", title: "75-125% of avg" },
+        { label: "Elevated", title: "125-175% of avg" },
+        { label: "High", title: ">175% of avg" },
+    ];
+
+    for (const { label, title } of zones) {
         const zone = createElement("div", {
             borderLeft: "1px solid rgba(255, 255, 255, 0.16)",
             borderRight: "1px solid rgba(255, 255, 255, 0.16)",
             borderBottom: "1px solid rgba(255, 255, 255, 0.16)",
             paddingTop: "5px",
+            minWidth: "0",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
         });
         zone.textContent = label;
+        zone.title = title;
+        zone.className = "ft-zone-label";
         zoneRow.appendChild(zone);
     }
 
@@ -1053,6 +1138,7 @@ function createTabRow(activeTab, onSwitch) {
 }
 
 function renderStatsPanelBody(panelBody, stats) {
+    hideMetricTooltip();
     const container = createElement("div", {});
     const allTimeStats = stats?.allTime || stats;
     container.appendChild(createProgressSection(allTimeStats));
