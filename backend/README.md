@@ -46,13 +46,21 @@ Current cloud deployment shape:
 - top-level sections:
   - `allTime`
   - `last24Hours`
+  - `lastWeek`
 
 For each section:
 - `totalPostsWatched`: total labeled rows in that window.
-- `allPosts.highlyNegativeArousal.{count,percent}`: HAN over all posts.
-- `allPosts.political.{count,percent}`: political posts over all posts.
+- `allPosts.highlyNegativeArousal.{count,percent,baseline,ratio,zone}`: HAN over all posts.
+- `allPosts.political.{count,percent,baseline,ratio,zone}`: political posts over all posts.
 - `politicalPosts.totalPosts`: number of political posts.
-- `politicalPosts.metrics.<metric>.{count,percent}`: metric over political posts only.
+- `politicalPosts.metrics.<metric>.{count,percent,baseline,ratio,zone}`: metric over political posts only.
+
+Metric fields:
+- `count`: number of matching posts.
+- `percent`: absolute percentage within the relevant denominator.
+- `baseline`: comparison percentage from the baseline source, using the app's assumed fallback when no published baseline is available.
+- `ratio`: `percent / baseline * 100`, rounded.
+- `zone`: one of `low`, `typical`, `elevated`, `high`, or `no-data`.
 
 Political metric keys include:
 - `partisanAnimosity`
@@ -63,6 +71,10 @@ Political metric keys include:
 - `socialDistrust`
 - `socialDistance`
 - `biasedEvaluationOfPoliticizedFacts`
+
+## Baselines
+
+Stats ratios compare each user's feed percentages to Piccardi et al. baselines. The baseline constants and zone mapping live in `backend/src/services/baselines.js`. Metrics with no published baseline use the app's original assumed fallback baseline so the UI can always show the stat.
 
 ## Storage and labeling behavior
 

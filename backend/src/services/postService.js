@@ -1,5 +1,6 @@
 const db = require("../db/database");
 const { EXTRA_LABELS, EXTRA_LABEL_COLUMNS } = require("../labeling/shared/catalog");
+const { POLITICAL_POST_METRIC_DEFINITIONS, buildStatsFromRow } = require("./statsBuilder");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -19,17 +20,6 @@ const BASE_POST_COLUMNS = [
     "label_confidence",
     "label_skip_reason",
     ...EXTRA_LABEL_COLUMNS,
-];
-
-const POLITICAL_POST_METRIC_DEFINITIONS = [
-    { responseKey: "partisanAnimosity", sourceColumn: "partisan_animosity", sqlAlias: "partisan_animosity" },
-    { responseKey: "supportUndemocraticPractices", sourceColumn: "support_undemocratic_practices", sqlAlias: "support_undemocratic_practices" },
-    { responseKey: "supportPartisanViolence", sourceColumn: "support_partisan_violence", sqlAlias: "support_partisan_violence" },
-    { responseKey: "supportUndemocraticCandidates", sourceColumn: "support_undemocratic_candidates", sqlAlias: "support_undemocratic_candidates" },
-    { responseKey: "oppositionToBipartisanCooperation", sourceColumn: "opposition_bipartisan_cooperation", sqlAlias: "opposition_bipartisan_cooperation" },
-    { responseKey: "socialDistrust", sourceColumn: "social_distrust", sqlAlias: "social_distrust" },
-    { responseKey: "socialDistance", sourceColumn: "social_distance", sqlAlias: "social_distance" },
-    { responseKey: "biasedEvaluationOfPoliticizedFacts", sourceColumn: "biased_evaluation_politicized_facts", sqlAlias: "biased_evaluation_politicized_facts" },
 ];
 
 const STATS_SELECT_SQL = [
@@ -201,23 +191,25 @@ async function getPostStats() {
 async function getPostStatsForUser(userId) {
     if (userId == null) {
         const labeledWhereClause = buildLabeledWhereClause("posts");
-        const [allTime, last24Hours, totalCapturedAllTime, totalCapturedLast24Hours] = await Promise.all([
+        const last24HoursWhereClause = buildWhereClause(labeledWhereClause, buildReceivedAtSinceWhereClause("posts", "24 hours"));
+        const lastWeekWhereClause = buildWhereClause(labeledWhereClause, buildReceivedAtSinceWhereClause("posts", "7 days"));
+        const [allTime, last24Hours, lastWeek, totalCapturedAllTime, totalCapturedLast24Hours, totalCapturedLastWeek] = await Promise.all([
             getAggregatedPostStats("FROM posts", labeledWhereClause, []),
-            getAggregatedPostStats(
-                "FROM posts",
-                buildWhereClause(labeledWhereClause, buildRecentReceivedAtWhereClause("posts")),
-                []
-            ),
+            getAggregatedPostStats("FROM posts", last24HoursWhereClause, []),
+            getAggregatedPostStats("FROM posts", lastWeekWhereClause, []),
             getTotalCapturedCount("FROM posts", "", []),
-            getTotalCapturedCount("FROM posts", buildRecentReceivedAtWhereClause("posts"), []),
+            getTotalCapturedCount("FROM posts", buildReceivedAtSinceWhereClause("posts", "24 hours"), []),
+            getTotalCapturedCount("FROM posts", buildReceivedAtSinceWhereClause("posts", "7 days"), []),
         ]);
 
         allTime.totalCaptured = totalCapturedAllTime;
         last24Hours.totalCaptured = totalCapturedLast24Hours;
+        lastWeek.totalCaptured = totalCapturedLastWeek;
 
         return {
             allTime,
             last24Hours,
+            lastWeek,
         };
     }
 
@@ -227,27 +219,34 @@ async function getPostStatsForUser(userId) {
           ON posts.id = user_posts.post_id
     `;
     const labeledWhereClause = buildWhereClause(buildUserWhereClause("user_posts", userId, 1), buildLabeledWhereClause("posts"));
-    const [allTime, last24Hours, totalCapturedAllTime, totalCapturedLast24Hours] = await Promise.all([
+    const last24HoursWhereClause = buildWhereClause(labeledWhereClause, buildReceivedAtSinceWhereClause("user_posts", "24 hours"));
+    const lastWeekWhereClause = buildWhereClause(labeledWhereClause, buildReceivedAtSinceWhereClause("user_posts", "7 days"));
+    const userWhereClause = buildUserWhereClause("user_posts", userId, 1);
+    const [allTime, last24Hours, lastWeek, totalCapturedAllTime, totalCapturedLast24Hours, totalCapturedLastWeek] = await Promise.all([
         getAggregatedPostStats(fromClause, labeledWhereClause, [userId]),
-        getAggregatedPostStats(
-            fromClause,
-            buildWhereClause(labeledWhereClause, buildRecentReceivedAtWhereClause("user_posts")),
-            [userId]
-        ),
-        getTotalCapturedCount("FROM user_posts", buildUserWhereClause("user_posts", userId, 1), [userId]),
+        getAggregatedPostStats(fromClause, last24HoursWhereClause, [userId]),
+        getAggregatedPostStats(fromClause, lastWeekWhereClause, [userId]),
+        getTotalCapturedCount("FROM user_posts", userWhereClause, [userId]),
         getTotalCapturedCount(
             "FROM user_posts",
-            buildWhereClause(buildUserWhereClause("user_posts", userId, 1), buildRecentReceivedAtWhereClause("user_posts")),
+            buildWhereClause(userWhereClause, buildReceivedAtSinceWhereClause("user_posts", "24 hours")),
+            [userId]
+        ),
+        getTotalCapturedCount(
+            "FROM user_posts",
+            buildWhereClause(userWhereClause, buildReceivedAtSinceWhereClause("user_posts", "7 days")),
             [userId]
         ),
     ]);
 
     allTime.totalCaptured = totalCapturedAllTime;
     last24Hours.totalCaptured = totalCapturedLast24Hours;
+    lastWeek.totalCaptured = totalCapturedLastWeek;
 
     return {
         allTime,
         last24Hours,
+        lastWeek,
     };
 }
 
@@ -263,8 +262,13 @@ function buildUserWhereClause(tableAlias, userId, paramIndex = 1) {
     return `${tableAlias}.user_id = $${paramIndex}`;
 }
 
-function buildRecentReceivedAtWhereClause(tableAlias) {
-    return `${tableAlias}.received_at >= NOW() - INTERVAL '24 hours'`;
+function buildReceivedAtSinceWhereClause(tableAlias, interval) {
+    const allowedIntervals = new Set(["24 hours", "7 days"]);
+    if (!allowedIntervals.has(interval)) {
+        throw new Error(`Unsupported stats interval: ${interval}`);
+    }
+
+    return `${tableAlias}.received_at >= NOW() - INTERVAL '${interval}'`;
 }
 
 function buildWhereClause(...clauses) {
@@ -299,40 +303,6 @@ async function getTotalCapturedCount(fromClause, whereClause = "", params = []) 
     );
 
     return Number(rows[0]?.total_captured) || 0;
-}
-
-function buildStatsFromRow(row) {
-    const total = Number(row.total_posts) || 0;
-    const highlyNegativeArousalCount = Number(row.highly_negative_arousal) || 0;
-    const politicalCount = Number(row.political_posts) || 0;
-    const politicalMetrics = {};
-
-    for (const metric of POLITICAL_POST_METRIC_DEFINITIONS) {
-        const count = Number(row[metric.sqlAlias]) || 0;
-        politicalMetrics[metric.responseKey] = {
-            count,
-            percent: politicalCount > 0 ? Math.round((count / politicalCount) * 100) : 0,
-        };
-    }
-
-    return {
-        totalCaptured: Number(row.total_captured) || 0,
-        totalPostsWatched: total,
-        allPosts: {
-            highlyNegativeArousal: {
-                count: highlyNegativeArousalCount,
-                percent: total > 0 ? Math.round((highlyNegativeArousalCount / total) * 100) : 0,
-            },
-            political: {
-                count: politicalCount,
-                percent: total > 0 ? Math.round((politicalCount / total) * 100) : 0,
-            },
-        },
-        politicalPosts: {
-            totalPosts: politicalCount,
-            metrics: politicalMetrics,
-        },
-    };
 }
 
 async function getUnlabeledPosts(limit = 25) {

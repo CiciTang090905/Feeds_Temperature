@@ -201,19 +201,6 @@ function createElement(tagName, styles = {}) {
     return element;
 }
 
-const METRIC_BASELINES = {
-    highlyNegativeArousal: 10,
-    political: 20,
-    partisanAnimosity: 10,
-    supportUndemocraticPractices: 3,
-    supportPartisanViolence: 3,
-    supportUndemocraticCandidates: 3,
-    oppositionToBipartisanCooperation: 5,
-    socialDistrust: 8,
-    socialDistance: 8,
-    biasedEvaluationOfPoliticizedFacts: 10,
-};
-
 const METRIC_DEFINITIONS = {
     highlyNegativeArousal:
         "Activated, intense negativity directed at someone: anger, rage, outrage, hostility, insults, aggressive blame.",
@@ -232,20 +219,44 @@ const METRIC_DEFINITIONS = {
     oppositionToBipartisanCooperation: "Resistance to cross-partisan collaboration: opposing cooperation between political parties.",
 };
 
-const COLOR_STOPS = [
-    { p: 0.00, r: 93, g: 202, b: 165 },
-    { p: 0.25, r: 151, g: 196, b: 89 },
-    { p: 0.45, r: 250, g: 199, b: 117 },
-    { p: 0.65, r: 239, g: 159, b: 39 },
-    { p: 0.85, r: 226, g: 75, b: 74 },
-    { p: 1.00, r: 163, g: 45, b: 45 },
-];
+const PICCARDI_BASELINES = {
+    highlyNegativeArousal: 10,
+    political: 17.1,
+    partisanAnimosity: 42.61,
+    supportUndemocraticPractices: 9.09,
+    supportPartisanViolence: 5.3,
+    supportUndemocraticCandidates: 8.44,
+    oppositionToBipartisanCooperation: 10.68,
+    socialDistrust: 35.63,
+    socialDistance: 60.03,
+    biasedEvaluationOfPoliticizedFacts: 53.38,
+};
 
-const SEVERITY_STYLES = {
-    below: { label: "Below avg", color: "#5DCAA5", background: "rgba(93, 202, 165, 0.16)" },
-    normal: { label: "Normal", color: "#97C459", background: "rgba(151, 196, 89, 0.16)" },
-    elevated: { label: "Elevated", color: "#EF9F27", background: "rgba(239, 159, 39, 0.18)" },
-    high: { label: "High", color: "#E24B4A", background: "rgba(226, 75, 74, 0.18)" },
+const ZONE_STYLES = {
+    low: {
+        label: "Low",
+        color: "#3fa66a",
+        border: "rgba(63,166,106,0.45)",
+        background: "rgba(63,166,106,0.12)",
+    },
+    typical: {
+        label: "Typical",
+        color: "#7ac74c",
+        border: "rgba(122,199,76,0.45)",
+        background: "rgba(122,199,76,0.12)",
+    },
+    elevated: {
+        label: "Elevated",
+        color: "#f0a93b",
+        border: "rgba(240,169,59,0.45)",
+        background: "rgba(240,169,59,0.12)",
+    },
+    high: {
+        label: "High",
+        color: "#dd4a2c",
+        border: "rgba(221,74,44,0.45)",
+        background: "rgba(221,74,44,0.12)",
+    },
 };
 
 function ensureStatsPanel() {
@@ -407,7 +418,7 @@ function injectPanelStyles(panel) {
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         }
         #${STATS_PANEL_ID} .ft-gauge-svg {
-            width: min(110px, 100%);
+            width: min(118px, 100%);
             height: auto;
         }
         #${STATS_PANEL_TOOLTIP_ID}::after {
@@ -425,7 +436,7 @@ function injectPanelStyles(panel) {
                 grid-template-columns: minmax(0, 1fr);
             }
             #${STATS_PANEL_ID} .ft-gauge-card {
-                padding: 9px 10px 10px;
+                padding: 10px 10px 11px;
             }
         }
         @container (max-width: 295px) {
@@ -436,7 +447,7 @@ function injectPanelStyles(panel) {
                 font-size: 10px;
             }
             #${STATS_PANEL_ID} .ft-metric-value {
-                font-size: 17px;
+                font-size: 22px;
             }
             #${STATS_PANEL_ID} .ft-metric-context {
                 max-width: 100%;
@@ -588,35 +599,6 @@ function hideMetricTooltip() {
     tooltip.style.display = "none";
 }
 
-function interpolateColor(t) {
-    const clamped = clamp(Number(t) || 0, 0, 1);
-    const nextIndex = COLOR_STOPS.findIndex((stop) => stop.p >= clamped);
-    if (nextIndex <= 0) return `rgb(${COLOR_STOPS[0].r}, ${COLOR_STOPS[0].g}, ${COLOR_STOPS[0].b})`;
-
-    const start = COLOR_STOPS[nextIndex - 1];
-    const end = COLOR_STOPS[nextIndex] || COLOR_STOPS[COLOR_STOPS.length - 1];
-    const localT = end.p === start.p ? 0 : (clamped - start.p) / (end.p - start.p);
-    const r = Math.round(start.r + (end.r - start.r) * localT);
-    const g = Math.round(start.g + (end.g - start.g) * localT);
-    const b = Math.round(start.b + (end.b - start.b) * localT);
-    return `rgb(${r}, ${g}, ${b})`;
-}
-
-function polarToPoint(cx, cy, radius, angleDeg) {
-    const angle = (angleDeg * Math.PI) / 180;
-    return {
-        x: cx + radius * Math.cos(angle),
-        y: cy + radius * Math.sin(angle),
-    };
-}
-
-function describeArc(cx, cy, radius, startDeg, endDeg) {
-    const start = polarToPoint(cx, cy, radius, startDeg);
-    const end = polarToPoint(cx, cy, radius, endDeg);
-    const largeArcFlag = Math.abs(endDeg - startDeg) <= 180 ? "0" : "1";
-    return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
-}
-
 function createSvgElement(tagName, attributes = {}) {
     const element = document.createElementNS("http://www.w3.org/2000/svg", tagName);
     for (const [key, value] of Object.entries(attributes)) {
@@ -625,145 +607,153 @@ function createSvgElement(tagName, attributes = {}) {
     return element;
 }
 
-function getMetricPosition(value, baseline) {
-    const maxVal = Math.max(1, baseline * 3.5);
-    return clamp((Number(value) || 0) / maxVal, 0, 1);
-}
-
-function getSeverity(value, baseline) {
-    const numericValue = Number(value) || 0;
-    if (numericValue < baseline * 0.75) return "below";
-    if (numericValue <= baseline * 1.25) return "normal";
-    if (numericValue <= baseline * 1.75) return "elevated";
-    return "high";
-}
-
-function getAverageDeltaText(value, baseline) {
-    const numericValue = Number(value) || 0;
-    if (!baseline) return "";
-
-    const delta = Math.round(((numericValue - baseline) / baseline) * 100);
-    if (delta > 0) return `${delta}% above avg`;
-    if (delta < 0) return `${Math.abs(delta)}% below avg`;
-    return "0% above avg";
-}
-
-function getMetricContextText(value, baseline, severity) {
-    const numericValue = Number(value) || 0;
-    const deltaText = getAverageDeltaText(numericValue, baseline);
-
-    if (severity === "high" && numericValue > 0) {
-        const inverse = Math.max(1, Math.round(100 / numericValue));
-        return `1 in ${inverse} posts | ${deltaText}`;
-    }
-
-    if (numericValue === 0) return `None detected | ${deltaText}`;
-    if (severity === "normal") return `Within normal range | ${deltaText}`;
-    return deltaText;
-}
-
 function formatMetricPercent(percent) {
     const value = Number(percent) || 0;
     return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
 }
 
-function createGaugeSvg(value, baseline) {
+function formatBaselinePercent(baseline) {
+    if (baseline == null) return "";
+    return `${Number(baseline).toFixed(1)}%`;
+}
+
+function ratioToAngle(ratio) {
+    const r = Number(ratio);
+    if (!Number.isFinite(r)) return null;
+    if (r <= 25) return (r / 25) * 30;
+    if (r <= 100) return 30 + ((r - 25) / 75) * 60;
+    if (r <= 125) return 90 + ((r - 100) / 25) * 15;
+    if (r <= 175) return 105 + ((r - 125) / 50) * 30;
+    const clamped = Math.min(r, 300);
+    return 135 + ((clamped - 175) / 125) * 45;
+}
+
+function ratioToZone(ratio) {
+    if (ratio == null) return "no-data";
+    if (ratio < 75) return "low";
+    if (ratio < 125) return "typical";
+    if (ratio < 175) return "elevated";
+    return "high";
+}
+
+function normalizeMetricStats(metricKey, metricStats) {
+    const stats = metricStats || {};
+    const baseline = stats.baseline !== undefined ? stats.baseline : PICCARDI_BASELINES[metricKey];
+    const ratio =
+        stats.ratio !== undefined
+            ? stats.ratio
+            : baseline != null && Number(baseline) !== 0
+              ? Math.round(((Number(stats.percent) || 0) / Number(baseline)) * 100)
+              : null;
+
+    return {
+        ...stats,
+        baseline,
+        ratio,
+        zone: stats.zone || ratioToZone(ratio),
+    };
+}
+
+function getRatioCaption(zone, ratio) {
+    if (zone === "low") return ["Well below baseline"];
+    if (zone !== "typical") return [`${Math.max(0, Math.round(Number(ratio) - 100))}% above baseline`];
+
+    const delta = Math.round(Number(ratio) - 100);
+    if (Number(ratio) >= 90 && Number(ratio) <= 110) return ["Within normal range"];
+    if (delta > 0) return ["Within normal range", `${delta}% above baseline`];
+    return ["Within normal range", `${Math.abs(delta)}% below baseline`];
+}
+
+function getSafeGradientId(metricKey) {
+    const safeKey = String(metricKey || "metric").replace(/[^a-zA-Z0-9_-]/g, "-");
+    return `grad-${safeKey}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createRatioGaugeSvg(metricKey, metricStats) {
     const svg = createSvgElement("svg", {
-        viewBox: "0 0 110 74",
-        width: "110",
-        height: "74",
+        viewBox: "0 0 200 140",
+        width: "100%",
         role: "img",
-        "aria-hidden": "true",
     });
     svg.classList.add("ft-gauge-svg");
 
-    const cx = 55;
-    const cy = 48;
-    const radius = 34;
-    const startDeg = -210;
-    const sweepDeg = 240;
-    const segments = 40;
-    const position = getMetricPosition(value, baseline);
-    const needleAngle = startDeg + position * sweepDeg;
-    const needleColor = interpolateColor(position);
+    const title = metricStats?.baseline == null ? `${metricKey} gauge` : `${metricKey} compared with ${formatBaselinePercent(metricStats.baseline)} baseline`;
+    svg.appendChild(createSvgElement("title")).textContent = title;
 
-    for (let i = 0; i < segments; i++) {
-        const segmentStart = startDeg + (i / segments) * sweepDeg;
-        const segmentEnd = startDeg + ((i + 0.72) / segments) * sweepDeg;
-        const path = createSvgElement("path", {
-            d: describeArc(cx, cy, radius, segmentStart, segmentEnd),
+    const gradientId = getSafeGradientId(metricKey);
+    const defs = createSvgElement("defs");
+    const gradient = createSvgElement("linearGradient", {
+        id: gradientId,
+        x1: "20",
+        y1: "120",
+        x2: "180",
+        y2: "120",
+        gradientUnits: "userSpaceOnUse",
+    });
+    [
+        ["0%", "#2f8a55"],
+        ["22%", "#6abf3a"],
+        ["40%", "#b8d038"],
+        ["50%", "#e8c93a"],
+        ["60%", "#f0a93b"],
+        ["72%", "#ee7a32"],
+        ["86%", "#dd4a2c"],
+        ["100%", "#c9302c"],
+    ].forEach(([offset, color]) => {
+        gradient.appendChild(createSvgElement("stop", { offset, "stop-color": color }));
+    });
+    defs.appendChild(gradient);
+    svg.appendChild(defs);
+
+    svg.appendChild(
+        createSvgElement("path", {
+            d: "M 20 120 A 80 80 0 0 1 180 120",
             fill: "none",
-            stroke: interpolateColor(i / (segments - 1)),
-            "stroke-width": "7",
+            stroke: `url(#${gradientId})`,
+            "stroke-width": "16",
             "stroke-linecap": "round",
-            opacity: "0.78",
+        })
+    );
+
+    if (metricStats?.baseline != null) {
+        svg.appendChild(createSvgElement("line", { x1: "100", y1: "36", x2: "100", y2: "50", stroke: "#d8dce0", "stroke-width": "2" }));
+        const baselineLabel = createSvgElement("text", {
+            x: "100",
+            y: "30",
+            "text-anchor": "middle",
+            "font-size": "11",
+            fill: "#d8dce0",
         });
-        svg.appendChild(path);
+        baselineLabel.textContent = formatBaselinePercent(metricStats.baseline);
+        svg.appendChild(baselineLabel);
     }
 
-    const baselinePosition = getMetricPosition(baseline, baseline);
-    const baselineAngle = startDeg + baselinePosition * sweepDeg;
-    const tickOuter = polarToPoint(cx, cy, radius + 5, baselineAngle);
-    const tickInner = polarToPoint(cx, cy, radius - 6, baselineAngle);
-    svg.appendChild(
-        createSvgElement("line", {
-            x1: tickInner.x.toFixed(2),
-            y1: tickInner.y.toFixed(2),
-            x2: tickOuter.x.toFixed(2),
-            y2: tickOuter.y.toFixed(2),
-            stroke: "rgba(255, 255, 255, 0.72)",
-            "stroke-width": "1.3",
-            "stroke-linecap": "round",
-        })
-    );
+    const angle = ratioToAngle(metricStats?.ratio);
+    if (angle != null) {
+        const needle = createSvgElement("g", { transform: `rotate(${(angle - 90).toFixed(2)} 100 120)` });
+        needle.appendChild(createSvgElement("line", { x1: "100", y1: "120", x2: "100", y2: "58", stroke: "#f4c842", "stroke-width": "3", "stroke-linecap": "round" }));
+        needle.appendChild(createSvgElement("circle", { cx: "100", cy: "120", r: "8", fill: "none", stroke: "#f4c842", "stroke-width": "2.5" }));
+        svg.appendChild(needle);
+    }
 
-    const labelPoint = polarToPoint(cx, cy, radius + 12, baselineAngle);
-    const baselineLabel = createSvgElement("text", {
-        x: labelPoint.x.toFixed(2),
-        y: labelPoint.y.toFixed(2),
-        fill: "rgba(255, 255, 255, 0.48)",
-        "font-size": "7",
-        "text-anchor": "middle",
-        "dominant-baseline": "middle",
-    });
-    baselineLabel.textContent = `${formatMetricPercent(baseline)}%`;
-    svg.appendChild(baselineLabel);
-
-    const needleEnd = polarToPoint(cx, cy, 24, needleAngle);
-    svg.appendChild(
-        createSvgElement("line", {
-            x1: cx,
-            y1: cy,
-            x2: needleEnd.x.toFixed(2),
-            y2: needleEnd.y.toFixed(2),
-            stroke: needleColor,
-            "stroke-width": "2.2",
-            "stroke-linecap": "round",
-        })
-    );
-    svg.appendChild(createSvgElement("circle", { cx, cy, r: "4", fill: needleColor }));
-    svg.appendChild(createSvgElement("circle", { cx, cy, r: "1.8", fill: "rgba(15, 20, 25, 0.97)" }));
-
-    return { svg, color: needleColor };
+    return svg;
 }
 
-function createGaugeCard(metric, metricStats) {
-    const value = Number(metricStats?.percent) || 0;
-    const count = Number(metricStats?.count) || 0;
-    const baseline = METRIC_BASELINES[metric.key] || 10;
-    const severity = getSeverity(value, baseline);
-    const severityStyle = SEVERITY_STYLES[severity];
-    const { svg, color } = createGaugeSvg(value, baseline);
+function createRatioGauge(metric, metricStats) {
+    const normalizedStats = normalizeMetricStats(metric.key, metricStats);
+    const zone = normalizedStats.zone || "no-data";
+    const zoneStyle = ZONE_STYLES[zone];
+    const svg = createRatioGaugeSvg(metric.key, normalizedStats);
+    const count = Number(normalizedStats.count) || 0;
 
     const card = createElement("article", {
         minWidth: "0",
         background: "rgba(255, 255, 255, 0.04)",
         border: "1px solid rgba(255, 255, 255, 0.08)",
         borderRadius: "10px",
-        padding: "8px 8px 10px",
+        padding: "10px 9px 11px",
         display: "grid",
         justifyItems: "center",
-        rowGap: "3px",
         textAlign: "center",
     });
     card.className = "ft-gauge-card";
@@ -777,6 +767,7 @@ function createGaugeCard(metric, metricStats) {
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
+        marginBottom: "4px",
     });
     countEl.className = "ft-metric-count";
     countEl.textContent = `${count} posts classified`;
@@ -784,9 +775,11 @@ function createGaugeCard(metric, metricStats) {
     const labelWrap = createElement("div", {
         position: "relative",
         maxWidth: "100%",
-        color: "rgba(255, 255, 255, 0.7)",
-        fontSize: "11px",
+        color: "#d8dce0",
+        fontSize: "12px",
+        fontWeight: "600",
         lineHeight: "1.2",
+        marginTop: "7px",
         textDecoration: "underline dotted rgba(255, 255, 255, 0.35)",
         textUnderlineOffset: "3px",
         cursor: "default",
@@ -804,43 +797,54 @@ function createGaugeCard(metric, metricStats) {
     labelWrap.addEventListener("blur", hideMetricTooltip);
 
     const valueEl = createElement("div", {
-        color,
+        color: "#f4c842",
         fontFamily: "monospace",
-        fontSize: "18px",
+        fontSize: "25px",
         fontWeight: "700",
         lineHeight: "1",
+        marginTop: "5px",
     });
     valueEl.className = "ft-metric-value";
-    valueEl.textContent = `${formatMetricPercent(value)}%`;
+    valueEl.textContent = `${formatMetricPercent(normalizedStats.percent)}%`;
 
     const contextEl = createElement("div", {
-        minHeight: "24px",
-        color: "rgba(255, 255, 255, 0.38)",
+        minHeight: "28px",
+        color: "#9aa3ad",
         fontSize: "10px",
         fontWeight: "600",
-        lineHeight: "1.2",
-        maxWidth: "112px",
+        lineHeight: "1.25",
+        marginTop: "6px",
+        maxWidth: "118px",
     });
     contextEl.className = "ft-metric-context";
-    contextEl.textContent = getMetricContextText(value, baseline, severity);
-
-    const badge = createElement("div", {
-        padding: "2px 6px",
-        borderRadius: "5px",
-        background: severityStyle.background,
-        color: severityStyle.color,
-        fontSize: "9px",
-        fontWeight: "700",
-        lineHeight: "1.1",
-    });
-    badge.textContent = severityStyle.label;
+    for (const line of getRatioCaption(zone, normalizedStats.ratio)) {
+        const lineEl = createElement("div");
+        lineEl.textContent = line;
+        contextEl.appendChild(lineEl);
+    }
 
     card.appendChild(countEl);
     card.appendChild(svg);
     card.appendChild(labelWrap);
     card.appendChild(valueEl);
     card.appendChild(contextEl);
-    card.appendChild(badge);
+
+    if (zoneStyle) {
+        const badge = createElement("div", {
+            padding: "3px 10px",
+            borderRadius: "999px",
+            border: `1px solid ${zoneStyle.border}`,
+            background: zoneStyle.background,
+            color: zoneStyle.color,
+            fontSize: "10px",
+            fontWeight: "700",
+            lineHeight: "1.1",
+            marginTop: "9px",
+        });
+        badge.textContent = zoneStyle.label;
+        card.appendChild(badge);
+    }
+
     return card;
 }
 
@@ -851,12 +855,8 @@ function createGaugeGrid(metrics, getStats) {
     });
     grid.className = "ft-gauge-grid";
 
-    const sortedMetrics = metrics
-        .map((metric) => ({ metric, stats: getStats(metric.key) || {} }))
-        .sort((a, b) => (Number(b.stats.percent) || 0) - (Number(a.stats.percent) || 0));
-
-    for (const item of sortedMetrics) {
-        grid.appendChild(createGaugeCard(item.metric, item.stats));
+    for (const metric of metrics) {
+        grid.appendChild(createRatioGauge(metric, getStats(metric.key) || {}));
     }
 
     return grid;
@@ -889,11 +889,11 @@ function createColorLegend() {
         height: "6px",
         borderRadius: "999px",
         background:
-            "linear-gradient(90deg, rgb(93, 202, 165), rgb(151, 196, 89), rgb(250, 199, 117), rgb(239, 159, 39), rgb(226, 75, 74), rgb(163, 45, 45))",
+            "linear-gradient(90deg, #2f8a55 0%, #6abf3a 38.9%, #e8c93a 50%, #f0a93b 58.3%, #ee7a32 75%, #c9302c 100%)",
     });
     const tick = createElement("div", {
         position: "absolute",
-        left: "28.6%",
+        left: "50%",
         top: "-3px",
         width: "1px",
         height: "12px",
@@ -901,7 +901,7 @@ function createColorLegend() {
     });
     const tickLabel = createElement("div", {
         position: "absolute",
-        left: "28.6%",
+        left: "50%",
         top: "10px",
         transform: "translateX(-50%)",
         color: "rgba(255, 255, 255, 0.44)",
@@ -914,7 +914,7 @@ function createColorLegend() {
 
     const zoneRow = createElement("div", {
         display: "grid",
-        gridTemplateColumns: "0.75fr 0.5fr 0.5fr 1.75fr",
+        gridTemplateColumns: "70fr 35fr 30fr 45fr",
         columnGap: "2px",
         marginTop: "13px",
         color: "rgba(255, 255, 255, 0.32)",
@@ -924,10 +924,10 @@ function createColorLegend() {
     });
 
     const zones = [
-        { label: "Below avg", title: "0-75% of avg" },
-        { label: "Normal", title: "75-125% of avg" },
-        { label: "Elevated", title: "125-175% of avg" },
-        { label: "High", title: ">175% of avg" },
+        { label: "Low", title: "0-75% of baseline" },
+        { label: "Typical", title: "75-125% of baseline" },
+        { label: "Elevated", title: "125-175% of baseline" },
+        { label: "High", title: ">175% of baseline" },
     ];
 
     for (const { label, title } of zones) {
@@ -976,7 +976,7 @@ function createMetricsSection(sectionStats) {
     const divider = createElement("div", {
         height: "1px",
         background: "rgba(255, 255, 255, 0.08)",
-        margin: "4px 0 0",
+        margin: "2px 0 0",
     });
     container.appendChild(divider);
 
@@ -1100,7 +1100,18 @@ function createProgressSection(stats) {
     return section;
 }
 
-function createTabRow(activeTab, onSwitch) {
+function getAvailableStatsTabs(stats) {
+    const tabs = [{ key: "allTime", label: "All time" }];
+    if (stats?.last24Hours) {
+        tabs.push({ key: "last24Hours", label: "Last 24h" });
+    }
+    if (stats?.lastWeek) {
+        tabs.push({ key: "lastWeek", label: "Last week" });
+    }
+    return tabs;
+}
+
+function createTabRow(activeTab, onSwitch, tabs) {
     const row = createElement("div", {
         display: "flex",
         alignItems: "stretch",
@@ -1108,11 +1119,6 @@ function createTabRow(activeTab, onSwitch) {
         borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
         padding: "0 16px",
     });
-
-    const tabs = [
-        { key: "allTime", label: "All time" },
-        { key: "last24Hours", label: "Last 24h" },
-    ];
 
     for (const tab of tabs) {
         const isActive = activeTab === tab.key;
@@ -1145,15 +1151,21 @@ function renderStatsPanelBody(panelBody, stats) {
     hideMetricTooltip();
     const container = createElement("div", {});
     const allTimeStats = stats?.allTime || stats;
+    const tabs = getAvailableStatsTabs(stats);
+    const activeTabAvailable = tabs.some((tab) => tab.key === activeStatsTab);
+    if (!activeTabAvailable) {
+        activeStatsTab = "allTime";
+    }
+
     container.appendChild(createProgressSection(allTimeStats));
     container.appendChild(
         createTabRow(activeStatsTab, (tab) => {
             activeStatsTab = tab;
             renderStatsPanelBody(panelBody, stats);
-        })
+        }, tabs)
     );
     container.appendChild(createColorLegend());
-    const activeSectionStats = activeStatsTab === "allTime" ? (stats?.allTime || stats) : (stats?.last24Hours || null);
+    const activeSectionStats = stats?.[activeStatsTab] || (activeStatsTab === "allTime" ? stats?.allTime || stats : null);
     container.appendChild(createMetricsSection(activeSectionStats));
     panelBody.replaceChildren(container);
 }
