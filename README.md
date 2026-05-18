@@ -1,6 +1,6 @@
 # Feeds Temperature
 
-Chrome extension + backend for collecting visible X/Twitter posts, uploading them to managed Postgres, and labeling political-emotion metrics.
+Chrome extension + backend for collecting visible X/Twitter posts, uploading them to Postgres on the hosted backend machine, and labeling political-emotion metrics.
 
 ## What it does
 
@@ -11,7 +11,7 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 - Stores canonical posts in Postgres via `DATABASE_URL` with dedupe on `platform + tweet_id`, plus per-user links in `user_posts`.
 - Uses the signed-in Chrome profile to auto-create and restore each user's backend account.
 - Runs real-time sync labeling in the backend worker.
-- Supports a hosted backend deployment behind `nginx` on port `80`.
+- Hosted deployment runs the Node backend and Postgres on the same Ubuntu machine; Postgres is bound to localhost only.
 - Prompt structure is still separated for clarity:
   - HAN
   - political
@@ -20,7 +20,7 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
   - draggable
   - minimize/expand toggle
   - refreshes every 10 seconds from backend stats API
-  - sections for both `All Time` and `Last 24 Hours`:
+  - tabs for `All time`, `Last 24h`, and `Last week`:
     - Posts watched
     - % of all posts (HAN, Political)
     - % of political posts (8 sublabels)
@@ -29,7 +29,7 @@ Chrome extension + backend for collecting visible X/Twitter posts, uploading the
 
 1. Content script captures visible posts and writes them to local extension storage.
 2. Background script syncs `captured_posts` to backend via `POST /api/posts/batch`.
-3. Backend saves rows in Postgres.
+3. Backend saves rows in Postgres on the backend machine.
 4. Sync label worker picks up unlabeled rows:
    - first pass: HAN + is_political
    - second pass (conditional): 8 political sublabels when `is_political = 1`
@@ -70,7 +70,8 @@ AZURE_OPENAI_KEY=...
 AZURE_OPENAI_DEPLOYMENT=...
 AZURE_OPENAI_API_VERSION=2024-10-21
 ```
-   For a future cloud machine, use `backend/.env` instead of `backend/.env.local`.
+   For a local loopback database, use `postgres://USER:PASSWORD@127.0.0.1:5432/DBNAME` without `sslmode=require`.
+   On the cloud machine, use `backend/.env` instead of `backend/.env.local`.
    If you want a custom location, set `ENV_FILE=/absolute/path/to/your.env`.
 3. Start backend:
 ```bash
@@ -88,6 +89,10 @@ npm run dev
 - App process is managed by `pm2` as `feeds-temperature-backend`
 - Node backend listens internally on `127.0.0.1:3001`
 - `nginx` proxies public port `80` to the backend
+- PostgreSQL 16 runs on the same machine and listens only on `localhost:5432`
+- Server-only `backend/.env` contains `DATABASE_URL` and Azure/OpenAI credentials; do not commit it
+- Daily local `pg_dump` backups run from cron into `/var/backups/feeds-temperature/`, keeping 7 days
+- Current backup limitation: dumps are on the same machine, so they protect against bad migrations or app mistakes, not whole-machine loss. TODO: add an off-machine encrypted backup copy before real study data lands.
 - Public health endpoint:
   - `http://34.207.146.239/health`
 
@@ -98,6 +103,8 @@ pm2 status
 pm2 logs feeds-temperature-backend --lines 100
 curl -s http://127.0.0.1:3001/health
 curl -s http://127.0.0.1/health
+sudo -u postgres psql -d feeds_temperature
+sudo /usr/local/bin/backup-feeds-db.sh
 ```
 
 End users do not need to set up env files or handle API keys. They sign in automatically through the Chrome profile already active in the browser.
@@ -133,6 +140,12 @@ Only the backend machine should have these env files. The extension/frontend sho
 - `quotedPost` (optional quoted-post context: `url`, `tweetId`, `author`, `text`, `media`)
 - `capturedAt`
 - `pageUrl`
+
+`capturedAt` is a Unix timestamp in milliseconds from the browser. In the database:
+
+- `posts.captured_at` is on the canonical deduplicated post row.
+- `user_posts.captured_at` is the per-user feed exposure time and is usually the better field for analysis.
+- Use `to_timestamp(user_posts.captured_at / 1000.0)` in SQL when you want a readable timestamp.
 
 ## DevTools helpers on X
 

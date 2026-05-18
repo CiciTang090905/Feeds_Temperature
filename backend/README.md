@@ -30,6 +30,10 @@ Current cloud deployment shape:
 - backend managed by `pm2`
 - backend app listens on `127.0.0.1:3001`
 - `nginx` reverse proxy serves public HTTP on port `80`
+- PostgreSQL 16 runs on the same machine and listens only on `localhost:5432`
+- app database: `feeds_temperature`
+- app role: `feeds_app`
+- daily local backups: `/var/backups/feeds-temperature/`, root-owned, keep 7 days
 - public health endpoint: `http://34.207.146.239/health`
 
 ## Routes
@@ -78,9 +82,11 @@ Stats ratios compare each user's feed percentages to average comparison values. 
 
 ## Storage and labeling behavior
 
-- Managed Postgres via `DATABASE_URL`
+- Postgres is configured through `DATABASE_URL`; hosted deployment uses local loopback Postgres on the same server
 - Cross-user deduplication: canonical `posts` are unique on `(platform, tweet_id)`, and `user_posts` tracks which user saw which post
 - `author`, `media`, `quoted_post`, and `label_confidence` are stored as Postgres `JSONB`
+- `captured_at` values are Unix timestamps in milliseconds from the browser. Use `user_posts.captured_at` for per-user feed exposure time and `to_timestamp(user_posts.captured_at / 1000.0)` for readable SQL output.
+- `received_at` is a Postgres timestamp for when the backend received the row.
 - Posts are scoped to a `users` row and identified by the Chrome profile's Google ID sent in the bearer header.
 - Real-time sync labeling is the active path.
 - Prompt separation is preserved:
@@ -110,8 +116,17 @@ Stats ratios compare each user's feed percentages to average comparison values. 
 
 - Keep real keys only in the backend env file on the machine that runs the backend.
 - Do not commit `backend/.env` or `backend/.env.local`.
+- On the hosted server, `/home/ubuntu/Feeds_temperature/backend/.env` contains the local Postgres password and Azure/OpenAI credentials.
+- Root's `/root/.pgpass` is used by the daily backup job and must stay mode `0600`.
 - Browser users do not receive these keys unless backend code explicitly exposes them.
 - Browser auth now comes from Chrome identity and backend Google ID lookup only.
+
+## Backups
+
+- `/usr/local/bin/backup-feeds-db.sh` runs `pg_dump` for `feeds_temperature`, gzips the dump, and deletes dumps older than 7 days.
+- Cron runs the script daily at about 3am and appends logs to `/var/log/feeds-temperature-db-backup.log`.
+- The backup setup has been restore-tested once into a throwaway database.
+- Important limitation: backups currently live on the same machine. They help with bad migrations, wrong commands, and app bugs, but not whole-machine loss. TODO: add off-machine encrypted backup before real study data lands.
 
 ## Evaluation output
 
