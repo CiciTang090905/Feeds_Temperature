@@ -1,7 +1,7 @@
 const { buildStatsFromRow } = require("../src/services/statsBuilder");
 
 describe("buildStatsFromRow", () => {
-    test("adds baselines, rounded ratios, and zones to stats metrics", () => {
+    test("adds averages, rounded ratios, and zones to stats metrics", () => {
         const stats = buildStatsFromRow({
             total_posts: 100,
             total_captured: 125,
@@ -41,7 +41,7 @@ describe("buildStatsFromRow", () => {
         });
     });
 
-    test("uses assumed baselines and shows zero-denominator metrics as 0 percent", () => {
+    test("shows zero-denominator metrics as 0 percent", () => {
         const stats = buildStatsFromRow({
             total_posts: 0,
             total_captured: 3,

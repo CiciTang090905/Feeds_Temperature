@@ -58,9 +58,9 @@ For each section:
 Metric fields:
 - `count`: number of matching posts.
 - `percent`: absolute percentage within the relevant denominator.
-- `baseline`: comparison percentage from the baseline source, using the app's assumed fallback when no published baseline is available.
+- `baseline`: average comparison percentage used by the gauge.
 - `ratio`: `percent / baseline * 100`, rounded.
-- `zone`: one of `low`, `typical`, `elevated`, `high`, or `no-data`.
+- `zone`: one of `low`, `typical`, `elevated`, or `high`.
 
 Political metric keys include:
 - `partisanAnimosity`
@@ -72,9 +72,9 @@ Political metric keys include:
 - `socialDistance`
 - `biasedEvaluationOfPoliticizedFacts`
 
-## Baselines
+## Averages
 
-Stats ratios compare each user's feed percentages to Piccardi et al. baselines. The baseline constants and zone mapping live in `backend/src/services/baselines.js`. Metrics with no published baseline use the app's original assumed fallback baseline so the UI can always show the stat.
+Stats ratios compare each user's feed percentages to average comparison values. The constants and zone mapping live in `backend/src/services/baselines.js`.
 
 ## Storage and labeling behavior
 

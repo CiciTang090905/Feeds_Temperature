@@ -219,19 +219,6 @@ const METRIC_DEFINITIONS = {
     oppositionToBipartisanCooperation: "Resistance to cross-partisan collaboration: opposing cooperation between political parties.",
 };
 
-const PICCARDI_BASELINES = {
-    highlyNegativeArousal: 10,
-    political: 17.1,
-    partisanAnimosity: 42.61,
-    supportUndemocraticPractices: 9.09,
-    supportPartisanViolence: 5.3,
-    supportUndemocraticCandidates: 8.44,
-    oppositionToBipartisanCooperation: 10.68,
-    socialDistrust: 35.63,
-    socialDistance: 60.03,
-    biasedEvaluationOfPoliticizedFacts: 53.38,
-};
-
 const ZONE_STYLES = {
     low: {
         label: "Low",
@@ -532,7 +519,7 @@ const POLITICAL_METRIC_ROWS = [
     { key: "oppositionToBipartisanCooperation", label: "Anti-bipartisan" },
     { key: "socialDistrust", label: "Social distrust" },
     { key: "socialDistance", label: "Social distance" },
-    { key: "biasedEvaluationOfPoliticizedFacts", label: "Biased fact eval" },
+    { key: "biasedEvaluationOfPoliticizedFacts", label: "Biased fact evaluation" },
 ];
 
 function createGroupLabel(text) {
@@ -612,9 +599,12 @@ function formatMetricPercent(percent) {
     return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
 }
 
-function formatBaselinePercent(baseline) {
-    if (baseline == null) return "";
-    return `${Number(baseline).toFixed(1)}%`;
+function formatDisplayedMetricPercent(percent, count) {
+    return formatMetricPercent(percent);
+}
+
+function formatAveragePercent(average) {
+    return `${Number(average).toFixed(1)}%`;
 }
 
 function ratioToAngle(ratio) {
@@ -629,7 +619,6 @@ function ratioToAngle(ratio) {
 }
 
 function ratioToZone(ratio) {
-    if (ratio == null) return "no-data";
     if (ratio < 75) return "low";
     if (ratio < 125) return "typical";
     if (ratio < 175) return "elevated";
@@ -638,13 +627,8 @@ function ratioToZone(ratio) {
 
 function normalizeMetricStats(metricKey, metricStats) {
     const stats = metricStats || {};
-    const baseline = stats.baseline !== undefined ? stats.baseline : PICCARDI_BASELINES[metricKey];
-    const ratio =
-        stats.ratio !== undefined
-            ? stats.ratio
-            : baseline != null && Number(baseline) !== 0
-              ? Math.round(((Number(stats.percent) || 0) / Number(baseline)) * 100)
-              : null;
+    const baseline = stats.baseline;
+    const ratio = Number(stats.ratio) || 0;
 
     return {
         ...stats,
@@ -654,14 +638,13 @@ function normalizeMetricStats(metricKey, metricStats) {
     };
 }
 
-function getRatioCaption(zone, ratio) {
-    if (zone === "low") return ["Well below baseline"];
-    if (zone !== "typical") return [`${Math.max(0, Math.round(Number(ratio) - 100))}% above baseline`];
+function getRatioCaption(ratio, percent) {
+    if (Number(percent) === 0) return ["Less than 1% of posts"];
 
     const delta = Math.round(Number(ratio) - 100);
-    if (Number(ratio) >= 90 && Number(ratio) <= 110) return ["Within normal range"];
-    if (delta > 0) return ["Within normal range", `${delta}% above baseline`];
-    return ["Within normal range", `${Math.abs(delta)}% below baseline`];
+    if (delta > 0) return [`${delta}% above average`];
+    if (delta < 0) return [`${Math.abs(delta)}% below average`];
+    return ["Same as average"];
 }
 
 function getSafeGradientId(metricKey) {
@@ -677,7 +660,7 @@ function createRatioGaugeSvg(metricKey, metricStats) {
     });
     svg.classList.add("ft-gauge-svg");
 
-    const title = metricStats?.baseline == null ? `${metricKey} gauge` : `${metricKey} compared with ${formatBaselinePercent(metricStats.baseline)} baseline`;
+    const title = `${metricKey} compared with ${formatAveragePercent(metricStats.baseline)} average`;
     svg.appendChild(createSvgElement("title")).textContent = title;
 
     const gradientId = getSafeGradientId(metricKey);
@@ -715,18 +698,16 @@ function createRatioGaugeSvg(metricKey, metricStats) {
         })
     );
 
-    if (metricStats?.baseline != null) {
-        svg.appendChild(createSvgElement("line", { x1: "100", y1: "36", x2: "100", y2: "50", stroke: "#d8dce0", "stroke-width": "2" }));
-        const baselineLabel = createSvgElement("text", {
-            x: "100",
-            y: "30",
-            "text-anchor": "middle",
-            "font-size": "11",
-            fill: "#d8dce0",
-        });
-        baselineLabel.textContent = formatBaselinePercent(metricStats.baseline);
-        svg.appendChild(baselineLabel);
-    }
+    svg.appendChild(createSvgElement("line", { x1: "100", y1: "36", x2: "100", y2: "50", stroke: "#d8dce0", "stroke-width": "2" }));
+    const averageLabel = createSvgElement("text", {
+        x: "100",
+        y: "30",
+        "text-anchor": "middle",
+        "font-size": "11",
+        fill: "#d8dce0",
+    });
+    averageLabel.textContent = formatAveragePercent(metricStats.baseline);
+    svg.appendChild(averageLabel);
 
     const angle = ratioToAngle(metricStats?.ratio);
     if (angle != null) {
@@ -741,7 +722,7 @@ function createRatioGaugeSvg(metricKey, metricStats) {
 
 function createRatioGauge(metric, metricStats) {
     const normalizedStats = normalizeMetricStats(metric.key, metricStats);
-    const zone = normalizedStats.zone || "no-data";
+    const zone = normalizedStats.zone;
     const zoneStyle = ZONE_STYLES[zone];
     const svg = createRatioGaugeSvg(metric.key, normalizedStats);
     const count = Number(normalizedStats.count) || 0;
@@ -805,7 +786,7 @@ function createRatioGauge(metric, metricStats) {
         marginTop: "5px",
     });
     valueEl.className = "ft-metric-value";
-    valueEl.textContent = `${formatMetricPercent(normalizedStats.percent)}%`;
+    valueEl.textContent = `${formatDisplayedMetricPercent(normalizedStats.percent, normalizedStats.count)}%`;
 
     const contextEl = createElement("div", {
         minHeight: "28px",
@@ -817,7 +798,7 @@ function createRatioGauge(metric, metricStats) {
         maxWidth: "118px",
     });
     contextEl.className = "ft-metric-context";
-    for (const line of getRatioCaption(zone, normalizedStats.ratio)) {
+    for (const line of getRatioCaption(normalizedStats.ratio, normalizedStats.percent)) {
         const lineEl = createElement("div");
         lineEl.textContent = line;
         contextEl.appendChild(lineEl);
@@ -889,7 +870,7 @@ function createColorLegend() {
         height: "6px",
         borderRadius: "999px",
         background:
-            "linear-gradient(90deg, #2f8a55 0%, #6abf3a 38.9%, #e8c93a 50%, #f0a93b 58.3%, #ee7a32 75%, #c9302c 100%)",
+            "linear-gradient(90deg, #2f8a55 0%, #6abf3a 37.5%, #e8c93a 50%, #f0a93b 62.5%, #ee7a32 87.5%, #c9302c 100%)",
     });
     const tick = createElement("div", {
         position: "absolute",
@@ -908,13 +889,13 @@ function createColorLegend() {
         fontSize: "8px",
         whiteSpace: "nowrap",
     });
-    tickLabel.textContent = "Baseline (avg)";
+    tickLabel.textContent = "Average";
     bar.appendChild(tick);
     bar.appendChild(tickLabel);
 
     const zoneRow = createElement("div", {
         display: "grid",
-        gridTemplateColumns: "70fr 35fr 30fr 45fr",
+        gridTemplateColumns: "37.5fr 25fr 25fr 12.5fr",
         columnGap: "2px",
         marginTop: "13px",
         color: "rgba(255, 255, 255, 0.32)",
@@ -924,10 +905,10 @@ function createColorLegend() {
     });
 
     const zones = [
-        { label: "Low", title: "0-75% of baseline" },
-        { label: "Typical", title: "75-125% of baseline" },
-        { label: "Elevated", title: "125-175% of baseline" },
-        { label: "High", title: ">175% of baseline" },
+        { label: "Low", title: "0-75% of average" },
+        { label: "Typical", title: "75-125% of average" },
+        { label: "Elevated", title: "125-175% of average" },
+        { label: "High", title: ">175% of average" },
     ];
 
     for (const { label, title } of zones) {
@@ -970,7 +951,10 @@ function createMetricsSection(sectionStats) {
         return container;
     }
 
-    container.appendChild(createGroupLabel("% of all posts"));
+    const allPostsCount = Number(sectionStats.totalPostsWatched) || 0;
+    const politicalPostsCount = Number(sectionStats.politicalPosts?.totalPosts) || 0;
+
+    container.appendChild(createGroupLabel(`% of all posts (${allPostsCount} posts)`));
     container.appendChild(createGaugeGrid(ALL_POST_ROWS, (key) => sectionStats.allPosts?.[key]));
 
     const divider = createElement("div", {
@@ -980,7 +964,7 @@ function createMetricsSection(sectionStats) {
     });
     container.appendChild(divider);
 
-    container.appendChild(createGroupLabel("% of political posts"));
+    container.appendChild(createGroupLabel(`% of political posts (${politicalPostsCount} posts)`));
     container.appendChild(createGaugeGrid(POLITICAL_METRIC_ROWS, (key) => sectionStats.politicalPosts?.metrics?.[key]));
 
     return container;

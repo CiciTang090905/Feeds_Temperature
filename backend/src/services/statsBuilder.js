@@ -41,17 +41,6 @@ function buildMetricStats(count, denominator, baselineKey) {
     const numericDenominator = Number(denominator) || 0;
     const baseline = PICCARDI_BASELINES[baselineKey];
     const percent = numericDenominator > 0 ? Math.round((numericCount / numericDenominator) * 100) : 0;
-
-    if (baseline == null || Number(baseline) === 0) {
-        return {
-            count: numericCount,
-            percent,
-            baseline,
-            ratio: null,
-            zone: "no-data",
-        };
-    }
-
     const ratio = Math.round((percent / Number(baseline)) * 100);
 
     return {

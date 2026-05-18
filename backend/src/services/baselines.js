@@ -12,7 +12,6 @@ const PICCARDI_BASELINES = {
 };
 
 function ratioToZone(ratioPct) {
-    if (ratioPct == null) return "no-data";
     if (ratioPct < 75) return "low";
     if (ratioPct < 125) return "typical";
     if (ratioPct < 175) return "elevated";

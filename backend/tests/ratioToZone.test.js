@@ -14,7 +14,6 @@ describe("ratioToZone", () => {
         [175, "high"],
         [300, "high"],
         [500, "high"],
-        [null, "no-data"],
     ])("maps %s to %s", (ratio, zone) => {
         expect(ratioToZone(ratio)).toBe(zone);
     });
