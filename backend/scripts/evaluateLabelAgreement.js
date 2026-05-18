@@ -4,7 +4,7 @@ const path = require("path");
 require("../src/config/loadEnv");
 
 const { all, closeDatabase, initializeDatabase } = require("../src/db/database");
-const { EXTRA_LABELS } = require("../src/config/labelCatalog");
+const { EXTRA_LABELS } = require("../src/labeling/shared/catalog");
 const { classifyHanAndPolitical, classifyPoliticalSublabels } = require("../src/services/labelService");
 
 const DEFAULT_SAMPLE_SIZE = 15;

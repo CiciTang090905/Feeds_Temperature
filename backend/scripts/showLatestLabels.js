@@ -1,7 +1,7 @@
 require("../src/config/loadEnv");
 
 const { all, closeDatabase, initializeDatabase } = require("../src/db/database");
-const { EXTRA_LABEL_COLUMNS } = require("../src/config/labelCatalog");
+const { EXTRA_LABEL_COLUMNS } = require("../src/labeling/shared/catalog");
 
 async function main() {
     const limit = Number(process.argv[2]) || 20;

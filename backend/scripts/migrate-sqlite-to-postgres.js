@@ -6,7 +6,7 @@ require("../src/config/loadEnv");
 
 const { closeDatabase, initializeDatabase } = require("../src/db/database");
 const { getDatabaseUrl } = require("../src/db/migrate");
-const { EXTRA_LABEL_COLUMNS } = require("../src/config/labelCatalog");
+const { EXTRA_LABEL_COLUMNS } = require("../src/labeling/shared/catalog");
 
 const DEFAULT_BATCH_SIZE = 500;
 const SQLITE_DB_PATH = process.env.SQLITE_DB_PATH || path.resolve(__dirname, "../data/feeds-temperature.db");
