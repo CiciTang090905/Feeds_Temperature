@@ -10,7 +10,7 @@
             "previewLimit": 50,
             "server": "localhost",
             "driver": "PostgreSQL",
-            "connectString": "postgresql://neondb_owner:npg_uS30jflFnpwg@ep-small-bar-am8uqzxn-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+            "connectString": "postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require",
             "name": "feeds-temperature-dev"
         }
     ]

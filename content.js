@@ -599,7 +599,7 @@ function formatMetricPercent(percent) {
     return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
 }
 
-function formatDisplayedMetricPercent(percent, count) {
+function formatDisplayedMetricPercent(percent) {
     return formatMetricPercent(percent);
 }
 
@@ -786,7 +786,7 @@ function createRatioGauge(metric, metricStats) {
         marginTop: "5px",
     });
     valueEl.className = "ft-metric-value";
-    valueEl.textContent = `${formatDisplayedMetricPercent(normalizedStats.percent, normalizedStats.count)}%`;
+    valueEl.textContent = `${formatDisplayedMetricPercent(normalizedStats.percent)}%`;
 
     const contextEl = createElement("div", {
         minHeight: "28px",
