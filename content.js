@@ -599,10 +599,6 @@ function formatMetricPercent(percent) {
     return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
 }
 
-function formatDisplayedMetricPercent(percent) {
-    return formatMetricPercent(percent);
-}
-
 function formatAveragePercent(average) {
     return `${Number(average).toFixed(1)}%`;
 }
@@ -616,26 +612,6 @@ function ratioToAngle(ratio) {
     if (r <= 175) return 105 + ((r - 125) / 50) * 30;
     const clamped = Math.min(r, 300);
     return 135 + ((clamped - 175) / 125) * 45;
-}
-
-function ratioToZone(ratio) {
-    if (ratio < 75) return "low";
-    if (ratio < 125) return "typical";
-    if (ratio < 175) return "elevated";
-    return "high";
-}
-
-function normalizeMetricStats(metricKey, metricStats) {
-    const stats = metricStats || {};
-    const baseline = stats.baseline;
-    const ratio = Number(stats.ratio) || 0;
-
-    return {
-        ...stats,
-        baseline,
-        ratio,
-        zone: stats.zone || ratioToZone(ratio),
-    };
 }
 
 function getRatioCaption(ratio, percent) {
@@ -721,7 +697,7 @@ function createRatioGaugeSvg(metricKey, metricStats) {
 }
 
 function createRatioGauge(metric, metricStats) {
-    const normalizedStats = normalizeMetricStats(metric.key, metricStats);
+    const normalizedStats = metricStats || {};
     const zone = normalizedStats.zone;
     const zoneStyle = ZONE_STYLES[zone];
     const svg = createRatioGaugeSvg(metric.key, normalizedStats);
@@ -786,7 +762,7 @@ function createRatioGauge(metric, metricStats) {
         marginTop: "5px",
     });
     valueEl.className = "ft-metric-value";
-    valueEl.textContent = `${formatDisplayedMetricPercent(normalizedStats.percent)}%`;
+    valueEl.textContent = `${formatMetricPercent(normalizedStats.percent)}%`;
 
     const contextEl = createElement("div", {
         minHeight: "28px",
