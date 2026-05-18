@@ -10,6 +10,11 @@ const PANEL_DEFAULT_MIN_HEIGHT = "180px";
 const FEED_TEMPERATURE_PANEL_STYLE_ID = "feeds-temperature-panel-style";
 const capturedIds = new Set();
 const tweetIdRegex = /\/status\/([0-9]+)/;
+const STATS_TABS = [
+    { key: "allTime", label: "All time", required: null },
+    { key: "last24Hours", label: "Last 24h", required: "last24Hours" },
+    { key: "lastWeek", label: "Last week", required: "lastWeek" },
+];
 let statsPanelTimerId = null;
 let activeStatsTab = "allTime";
 const panelState = {
@@ -1061,14 +1066,7 @@ function createProgressSection(stats) {
 }
 
 function getAvailableStatsTabs(stats) {
-    const tabs = [{ key: "allTime", label: "All time" }];
-    if (stats?.last24Hours) {
-        tabs.push({ key: "last24Hours", label: "Last 24h" });
-    }
-    if (stats?.lastWeek) {
-        tabs.push({ key: "lastWeek", label: "Last week" });
-    }
-    return tabs;
+    return STATS_TABS.filter((tab) => !tab.required || stats?.[tab.required]);
 }
 
 function createTabRow(activeTab, onSwitch, tabs) {

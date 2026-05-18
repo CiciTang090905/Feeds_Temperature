@@ -15,12 +15,12 @@ function buildStatsFromRow(row) {
     const total = Number(row.total_posts) || 0;
     const highlyNegativeArousalCount = Number(row.highly_negative_arousal) || 0;
     const politicalCount = Number(row.political_posts) || 0;
-    const politicalMetrics = {};
-
-    for (const metric of POLITICAL_POST_METRIC_DEFINITIONS) {
-        const count = Number(row[metric.sqlAlias]) || 0;
-        politicalMetrics[metric.responseKey] = buildMetricStats(count, politicalCount, metric.responseKey);
-    }
+    const politicalMetrics = Object.fromEntries(
+        POLITICAL_POST_METRIC_DEFINITIONS.map((metric) => [
+            metric.responseKey,
+            buildMetricStats(row[metric.sqlAlias], politicalCount, metric.responseKey),
+        ])
+    );
 
     return {
         totalCaptured: Number(row.total_captured) || 0,

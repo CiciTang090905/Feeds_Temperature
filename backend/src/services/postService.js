@@ -31,6 +31,12 @@ const STATS_SELECT_SQL = [
     ),
 ].join(",\n                ");
 
+const STATS_WINDOWS = [
+    { key: "allTime", interval: null },
+    { key: "last24Hours", interval: "24 hours" },
+    { key: "lastWeek", interval: "7 days" },
+];
+
 function buildPostKey(post) {
     return `${post.platform}:${post.tweetId}`;
 }
@@ -190,27 +196,12 @@ async function getPostStats() {
 
 async function getPostStatsForUser(userId) {
     if (userId == null) {
-        const labeledWhereClause = buildLabeledWhereClause("posts");
-        const last24HoursWhereClause = buildWhereClause(labeledWhereClause, buildReceivedAtSinceWhereClause("posts", "24 hours"));
-        const lastWeekWhereClause = buildWhereClause(labeledWhereClause, buildReceivedAtSinceWhereClause("posts", "7 days"));
-        const [allTime, last24Hours, lastWeek, totalCapturedAllTime, totalCapturedLast24Hours, totalCapturedLastWeek] = await Promise.all([
-            getAggregatedPostStats("FROM posts", labeledWhereClause, []),
-            getAggregatedPostStats("FROM posts", last24HoursWhereClause, []),
-            getAggregatedPostStats("FROM posts", lastWeekWhereClause, []),
-            getTotalCapturedCount("FROM posts", "", []),
-            getTotalCapturedCount("FROM posts", buildReceivedAtSinceWhereClause("posts", "24 hours"), []),
-            getTotalCapturedCount("FROM posts", buildReceivedAtSinceWhereClause("posts", "7 days"), []),
-        ]);
-
-        allTime.totalCaptured = totalCapturedAllTime;
-        last24Hours.totalCaptured = totalCapturedLast24Hours;
-        lastWeek.totalCaptured = totalCapturedLastWeek;
-
-        return {
-            allTime,
-            last24Hours,
-            lastWeek,
-        };
+        return getStatsWindows({
+            capturedFromClause: "FROM posts",
+            labelPostAlias: "posts",
+            receivedAtAlias: "posts",
+            statsFromClause: "FROM posts",
+        });
     }
 
     const fromClause = `
@@ -218,36 +209,40 @@ async function getPostStatsForUser(userId) {
         JOIN posts
           ON posts.id = user_posts.post_id
     `;
-    const labeledWhereClause = buildWhereClause(buildUserWhereClause("user_posts", userId, 1), buildLabeledWhereClause("posts"));
-    const last24HoursWhereClause = buildWhereClause(labeledWhereClause, buildReceivedAtSinceWhereClause("user_posts", "24 hours"));
-    const lastWeekWhereClause = buildWhereClause(labeledWhereClause, buildReceivedAtSinceWhereClause("user_posts", "7 days"));
-    const userWhereClause = buildUserWhereClause("user_posts", userId, 1);
-    const [allTime, last24Hours, lastWeek, totalCapturedAllTime, totalCapturedLast24Hours, totalCapturedLastWeek] = await Promise.all([
-        getAggregatedPostStats(fromClause, labeledWhereClause, [userId]),
-        getAggregatedPostStats(fromClause, last24HoursWhereClause, [userId]),
-        getAggregatedPostStats(fromClause, lastWeekWhereClause, [userId]),
-        getTotalCapturedCount("FROM user_posts", userWhereClause, [userId]),
-        getTotalCapturedCount(
-            "FROM user_posts",
-            buildWhereClause(userWhereClause, buildReceivedAtSinceWhereClause("user_posts", "24 hours")),
-            [userId]
-        ),
-        getTotalCapturedCount(
-            "FROM user_posts",
-            buildWhereClause(userWhereClause, buildReceivedAtSinceWhereClause("user_posts", "7 days")),
-            [userId]
-        ),
-    ]);
 
-    allTime.totalCaptured = totalCapturedAllTime;
-    last24Hours.totalCaptured = totalCapturedLast24Hours;
-    lastWeek.totalCaptured = totalCapturedLastWeek;
+    return getStatsWindows({
+        baseWhereClause: buildUserWhereClause("user_posts", userId, 1),
+        capturedFromClause: "FROM user_posts",
+        labelPostAlias: "posts",
+        params: [userId],
+        receivedAtAlias: "user_posts",
+        statsFromClause: fromClause,
+    });
+}
 
-    return {
-        allTime,
-        last24Hours,
-        lastWeek,
-    };
+async function getStatsWindows({
+    baseWhereClause = "",
+    capturedFromClause,
+    labelPostAlias,
+    params = [],
+    receivedAtAlias,
+    statsFromClause,
+}) {
+    const entries = await Promise.all(
+        STATS_WINDOWS.map(async (window) => {
+            const receivedAtWhereClause = window.interval ? buildReceivedAtSinceWhereClause(receivedAtAlias, window.interval) : "";
+            const statsWhereClause = buildWhereClause(baseWhereClause, buildLabeledWhereClause(labelPostAlias), receivedAtWhereClause);
+            const capturedWhereClause = buildWhereClause(baseWhereClause, receivedAtWhereClause);
+            const [stats, totalCaptured] = await Promise.all([
+                getAggregatedPostStats(statsFromClause, statsWhereClause, params),
+                getTotalCapturedCount(capturedFromClause, capturedWhereClause, params),
+            ]);
+
+            return [window.key, { ...stats, totalCaptured }];
+        })
+    );
+
+    return Object.fromEntries(entries);
 }
 
 function buildLabeledWhereClause(postAlias = "posts") {
