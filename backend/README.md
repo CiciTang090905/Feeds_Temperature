@@ -1,136 +1,100 @@
-# Backend
+# Backend — operational reference
 
-Express + Postgres backend for ingesting captured X posts, storing them, and serving aggregate label stats.
+Express + PostgreSQL backend that ingests captured X posts, deduplicates and
+stores them, labels them with the model, and serves aggregate label stats.
 
-## Backend setup
+This is the **operational deep-dive only**. For architecture, data model,
+setup, scripts, gotchas, and project status, see the
+[root README](../README.md). This file deliberately does not repeat those.
 
-```bash
-cd backend
-npm install
-npm run db:migrate
-npm run dev
-```
+## Env loading
 
-Env loading uses one file at a time:
+`src/config/loadEnv.js` loads exactly one file, in this precedence:
 
-- `ENV_FILE=...` if you explicitly set it
-- otherwise `backend/.env.local` when present
-- otherwise `backend/.env`
+1. `ENV_FILE` if explicitly set (absolute, or relative to cwd)
+2. `.env.local` if present
+3. `.env`
 
-Recommended backend setup:
-
-- local development: keep secrets in `backend/.env.local`
-- cloud/server machine: keep secrets in `backend/.env`
-- end users do not need to set up env files
-
-Current cloud deployment shape:
-
-- Ubuntu server
-- Node 22 runtime
-- backend managed by `pm2`
-- backend app listens on `127.0.0.1:3001`
-- `nginx` reverse proxy serves public HTTP on port `80`
-- PostgreSQL 16 runs on the same machine and listens only on `localhost:5432`
-- app database: `feeds_temperature`
-- app role: `feeds_app`
-- daily local backups: `/var/backups/feeds-temperature/`, root-owned, keep 7 days
-- public health endpoint: `http://34.207.146.239/health`
+Local dev → `.env.local`. Server → `.env`. They are never merged.
 
 ## Routes
 
-- `GET /health` -> service health.
-- `POST /api/users/auto-login` -> create or restore a user from the signed-in Chrome profile.
-- `PATCH /api/users/me` -> update the signed-in username.
-- `POST /api/posts/batch` -> ingest a batch of captured posts.
-- `GET /api/posts` -> list stored posts (newest first).
-- `GET /api/posts/stats` -> aggregate post and label statistics for UI display.
+All `/api/posts/*` and `/api/users/me` routes require a `Bearer <googleId>`
+header (`middleware/requireUser.js`). `auto-login` and `health` do not.
+
+| Method + path | Purpose |
+|---|---|
+| `GET /health` | Service health |
+| `POST /api/users/auto-login` | Create or restore a user from the Chrome profile Google ID |
+| `PATCH /api/users/me` | Update the signed-in username |
+| `POST /api/posts/batch` | Ingest a batch of captured posts (rate-limited) |
+| `GET /api/posts` | List the signed-in user's stored posts (newest first) |
+| `GET /api/posts/stats` | Aggregate post + label statistics for the panel |
+| `GET /api/posts/events` | Server-Sent Events stream of stats updates (heartbeat every 25s) |
+
+`POST /api/posts/batch` returns `202` with
+`{ receivedCount, insertedCount, duplicateCount, acceptedIds, duplicateIds }`.
+Rate limit: per-user, default 1000 posts/hour (`INGEST_POST_LIMIT_PER_HOUR`),
+in-memory, resets on restart.
 
 ## `/api/posts/stats` response shape
 
-- top-level sections:
-  - `allTime`
-  - `last24Hours`
-  - `lastWeek`
+Top-level sections: `allTime`, `last24Hours`, `lastWeek`.
 
 For each section:
-- `totalPostsWatched`: total labeled rows in that window.
-- `allPosts.highlyNegativeArousal.{count,percent,baseline,ratio,zone}`: HAN over all posts.
-- `allPosts.political.{count,percent,baseline,ratio,zone}`: political posts over all posts.
-- `politicalPosts.totalPosts`: number of political posts.
-- `politicalPosts.metrics.<metric>.{count,percent,baseline,ratio,zone}`: metric over political posts only.
 
-Metric fields:
-- `count`: number of matching posts.
-- `percent`: absolute percentage within the relevant denominator.
-- `baseline`: average comparison percentage used by the gauge.
-- `ratio`: `percent / baseline * 100`, rounded.
-- `zone`: one of `low`, `typical`, `elevated`, or `high`.
+- `totalPostsWatched` — total labeled rows in that window.
+- `allPosts.highlyNegativeArousal.{count,percent,baseline,ratio,zone}` — HAN
+  over all posts.
+- `allPosts.political.{count,percent,baseline,ratio,zone}` — political over all
+  posts.
+- `politicalPosts.totalPosts` — number of political posts.
+- `politicalPosts.metrics.<metric>.{count,percent,baseline,ratio,zone}` —
+  metric over political posts only.
 
-Political metric keys include:
-- `partisanAnimosity`
-- `supportUndemocraticPractices`
-- `supportPartisanViolence`
-- `supportUndemocraticCandidates`
-- `oppositionToBipartisanCooperation`
-- `socialDistrust`
-- `socialDistance`
-- `biasedEvaluationOfPoliticizedFacts`
+Metric field meanings:
 
-## Averages
+- `count` — number of matching posts.
+- `percent` — absolute percentage within the relevant denominator.
+- `baseline` — average comparison percentage used by the gauge.
+- `ratio` — `percent / baseline * 100`, rounded.
+- `zone` — one of `low`, `typical`, `elevated`, `high`.
 
-Stats ratios compare each user's feed percentages to average comparison values. The constants and zone mapping live in `backend/src/services/baselines.js`.
+Political metric keys (camelCase in the response): `partisanAnimosity`,
+`supportUndemocraticPractices`, `supportPartisanViolence`,
+`supportUndemocraticCandidates`, `oppositionToBipartisanCooperation`,
+`socialDistrust`, `socialDistance`, `biasedEvaluationOfPoliticizedFacts`.
 
-## Storage and labeling behavior
+## Baselines and zones
 
-- Postgres is configured through `DATABASE_URL`; hosted deployment uses local loopback Postgres on the same server
-- Cross-user deduplication: canonical `posts` are unique on `(platform, tweet_id)`, and `user_posts` tracks which user saw which post
-- `author`, `media`, `quoted_post`, and `label_confidence` are stored as Postgres `JSONB`
-- `captured_at` values are Unix timestamps in milliseconds from the browser. Use `user_posts.captured_at` for per-user feed exposure time and `to_timestamp(user_posts.captured_at / 1000.0)` for readable SQL output.
-- `received_at` is a Postgres timestamp for when the backend received the row.
-- Posts are scoped to a `users` row and identified by the Chrome profile's Google ID sent in the bearer header.
-- Real-time sync labeling is the active path.
-- Prompt separation is preserved:
-  - HAN prompt
-  - political prompt
-  - 8 individual sublabel prompts
-- Internal metadata:
-  - confidence and audit fields are stored in `label_confidence`
-  - includes image usage flags from model outputs (`image_used_*`)
+Stats ratios compare each user's feed percentages against fixed average
+comparison values. The baseline constants and the `low`/`typical`/`elevated`/
+`high` zone mapping live in `src/services/baselines.js`. Tune severity
+thresholds there.
 
-## Scripts
+## Ingest / dedup behavior
 
-- `npm run dev` -> backend with nodemon + auto label worker
-- `npm run start` -> backend start
-- `npm run db:migrate` -> run pending Postgres migrations
-- `npm run db:rollback` -> roll back one Postgres migration
-- `npm run db:migrate:create -- <name>` -> create a new migration stub
-- `npm run db:copy:sqlite` -> copy rows from local SQLite into Postgres
-- `npm run label:one` -> label one text or one DB row
-- `npm run label:all` -> one-pass labeling
-- `npm run label:watch` -> continuous labeling loop
-- `npm run labels:show` -> print latest labels
-- `npm run label:eval15` -> evaluate label agreement on random 15 labeled posts
-- `npm run label:stability -- 15 10` -> rerun labeling on one random 15-post sample across 10 shuffled rounds and compare stability
+`services/postService.js`:
 
-## Secret handling
+- Upserts the canonical `posts` row on conflict `(platform, tweet_id)`,
+  `COALESCE`-ing missing fields and keeping the greatest `captured_at` /
+  `received_at`.
+- Inserts a `user_posts` link; on conflict updates that user's `captured_at` /
+  `received_at` and counts the post as a duplicate for that user.
+- Everything runs inside one transaction per batch (`db.withTransaction`).
 
-- Keep real keys only in the backend env file on the machine that runs the backend.
-- Do not commit `backend/.env` or `backend/.env.local`.
-- On the hosted server, `/home/ubuntu/Feeds_temperature/backend/.env` contains the local Postgres password and Azure/OpenAI credentials.
-- Root's `/root/.pgpass` is used by the daily backup job and must stay mode `0600`.
-- Browser users do not receive these keys unless backend code explicitly exposes them.
-- Browser auth now comes from Chrome identity and backend Google ID lookup only.
+## Label worker
 
-## Backups
+`labeling/sync/labelWorker.js` polls every `LABEL_POLL_INTERVAL_MS`
+(default 10000). Pass 1 = HAN + `is_political`; pass 2 (only if political) = the
+8 sublabels. Retriable Azure 5xx / timeout / image-download errors are retried;
+content-filter rejections are recorded as an all-zero fallback with a skip
+reason so the worker keeps moving.
 
-- `/usr/local/bin/backup-feeds-db.sh` runs `pg_dump` for `feeds_temperature`, gzips the dump, and deletes dumps older than 7 days.
-- Cron runs the script daily at about 3am and appends logs to `/var/log/feeds-temperature-db-backup.log`.
-- The backup setup has been restore-tested once into a throwaway database.
-- Important limitation: backups currently live on the same machine. They help with bad migrations, wrong commands, and app bugs, but not whole-machine loss. TODO: add off-machine encrypted backup before real study data lands.
+## Migrations
 
-## Evaluation output
-
-- `label:eval15` prints to terminal and writes latest report to:
-  - `backend/tmp/label-eval-latest.txt`
-- `label:stability` prints to terminal and writes latest report to:
-  - `backend/tmp/label-stability-latest.txt`
+`node-pg-migrate`, directory `backend/migrations/`, table `pgmigrations`,
+single-transaction, advisory-locked. `runDbMigrations()` runs automatically on
+backend boot via `db/database.js` → a broken migration blocks startup, not just
+the CLI. `npm run db:migrate:create -- <name>` scaffolds from
+`scripts/templates/migration-template.mjs`.
