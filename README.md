@@ -251,7 +251,7 @@ machine:
 
 ---
 
-## ⚠️ Easy to forget (gotchas)
+## Things to note
 
 - **The backend IP `34.207.146.239` is hardcoded.** It appears in
   `manifest.json` (`host_permissions`) and as the `BACKEND_*_URL` constants in
@@ -274,7 +274,7 @@ machine:
   deploying a risky migration.
 - **Backups are same-machine only.** They protect against bad migrations / wrong
   commands / app bugs, *not* whole-machine loss. An off-machine encrypted copy
-  is the intended next step before real study data lands (see Project status).
+  is the intended next step before real study data lands.
 - **`console.js` is not the extension.** It is a separate manual
   paste-into-DevTools capture script using `localStorage`. The real pipeline is
   `content.js` + `background.js` using `chrome.storage.local`. Don't confuse the
@@ -322,20 +322,3 @@ operational detail.
 - The old Neon prototyping database has been **deleted**, so the connection
   string that was previously committed to `.vscode/settings.json` is dead and
   no longer a live exposure. (Closed item, kept here for history.)
-
----
-
-## Project status
-
-Snapshot of where this milestone closes.
-
-- [x] Postgres self-hosted on the backend machine (off Neon), loopback-only
-- [x] Daily local `pg_dump` backups + verified restore test, 7-day retention
-- [x] Old Neon credential neutralized (Neon project deleted)
-- [x] Real-time sync labeling (HAN → political → 8 sublabels) is the active path
-- [x] Cross-user post deduplication (`posts` + `user_posts`)
-- [x] In-page stats panel with severity zones vs. baseline averages
-- [ ] **Off-machine encrypted backup copy** — required before real study data
-      lands; same-machine dumps do not survive machine loss
-- [ ] Backend IP is hardcoded across `manifest.json` / `background.js` —
-      candidate for a single config constant before any IP change
